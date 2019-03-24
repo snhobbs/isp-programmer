@@ -1,2 +1,3 @@
 from .ISPChip import *
-from .LPC804 import *
+from .NXPChip import NXPChip
+from .LPC804 import LPC804

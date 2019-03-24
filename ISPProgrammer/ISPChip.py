@@ -1,6 +1,7 @@
 from serial import Serial
 from collections import deque
 from timeout_decorator import timeout
+from time import sleep
 '''
 class Serial(object):
     
@@ -30,13 +31,15 @@ class ISPChip(object):
 
     def WriteSerial(self, string):
         out = bytes(string, encoding="utf-8")
-        print(out)
         self.uart.write(out)
+
+    def Wait(self):
+        sleep(0.05)
 
     def Flush(self):
         self.uart.flush()
 
-    @timeout(1)
+    @timeout(0.25)
     def ReadLine(self):
         while(not self.Read()):
             continue
@@ -59,9 +62,9 @@ class ISPChip(object):
 
         chIn = self.uart.read_all()
         for ch in chIn:
-            print(chr(ch))
+            #print(hex(ch))
             self.bufferIn.append(ch)
-            if(chr(ch) in self.NewLine):
+            if(chr(ch) == self.NewLine[-1]):
                 fNewFrame = True
         return fNewFrame
          

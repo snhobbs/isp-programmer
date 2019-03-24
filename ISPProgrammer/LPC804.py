@@ -1,8 +1,8 @@
-from . import ISPChip
+from . import NXPChip 
 from timeout_decorator import TimeoutError
 
-class LPC804(ISPChip):
-    PageSize = 64
+class LPC804(NXPChip):
+    ChipName = "LPC804"
     CRCLocation = 0x000002fc
     CRCValues = {
         "NO_ISP": 0x4e697370,
@@ -10,60 +10,32 @@ class LPC804(ISPChip):
         "CRP2" : 0x87654321,       
         "CRP3" : 0x43218765,       
     }
-    NewLine = "\r\n"
-    Parity = None
-    DataBits = 8
-    StopBits = 1
-    SyncString = "Synchronized\r\n"
-    SyncVerified = "OK\r\n"
     CrystalFrequency = 30000#khz == 30MHz
-    PartID = "0x00008454"
-    ChipName = "LPC804"
+    PartIDs = (
+        0x00008441,
+        0x00008442,
+        0x00008444,
+        0x00008451,
+        0x00008452,
+        0x00008454,
+        0x00008454,
+    )
 
-    ReturnCodes = {
-        "CMD_SUCCESS"                               : 0x0,
-        "INVALID_COMMAND"                           : 0x1,
-        "SRC_ADDR_ERROR"                            : 0x2,
-        "DST_ADDR_ERROR"                            : 0x3,
-        "SRC_ADDR_NOT_MAPPED"                       : 0x4,
-        "DST_ADDR_NOT_MAPPED"                       : 0x5,
-        "COUNT_ERROR"                               : 0x6,
-        "INVALID_SECTOR/INVALID_PAGE"               : 0x7,
-        "SECTOR_NOT_BLANK"                          : 0x8,
-        "SECTOR_NOT_PREPARED_FOR_WRITE_OPERATION"   : 0x9,
-        "COMPARE_ERROR"                             : 0xa,
-        "BUSY"                                      : 0xb,
-        "PARAM_ERROR"                               : 0xc,
-        "ADDR_ERROR"                                : 0xd,
-        "ADDR_NOT_MAPPED"                           : 0xe,
-        "CMD_LOCKED"                                : 0xf,
-        "INVALID_CODE"                              : 0x10,
-        "INVALID_BAUD_RATE"                         : 0x11,
-        "INVALID_STOP_BIT"                          : 0x12,
-        "CODE_READ_PROTECTION_ENABLED"              : 0x13,
-        "Unused 1"                                  : 0x14, 
-        "USER_CODE_CHECKSUM"                        : 0x15,
-        "Unused 2"                                  : 0x16,
-        "EFRO_NO_POWER"                             : 0x17,
-        "FLASH_NO_POWER"                            : 0x18,
-        "Unused 3"                                  : 0x19,
-        "Unused 4"                                  : 0x1a,
-        "FLASH_NO_CLOCK"                            : 0x1b,
-        "REINVOKE_ISP_CONFIG"                       : 0x1c,
-        "NO_VALID_IMAGE"                            : 0x1d,
-        "FAIM_NO_POWER"                             : 0x1e,
-        "FAIM_NO_CLOCK"                             : 0x1f,
-    }
-
-    def Write(self, string):
-        self.WriteSerial(string + self.NewLine)
+    SectorCount = 32# or 16 for 16KB flash FIXME
 
     def Unlock(self):
         '''
         Enables Flash Write, Erase, & Go
         '''
-        code = 23130
-        self.Write("U %d"%(code))
+        print("Unlock")
+        self.Flush()
+        self.GetBufferIn()
+        self.Write("U 23130")
+        self.Wait()
+        resp = self.ReadLine().strip().split('\n')
+        code = int(resp[-1])
+        if(code != self.ReturnCodes["CMD_SUCCESS"]):
+            raise UserWarning("Return Code Failure in Unlock %d"%code)
 
     def SetBaudRate(self, baudRate, stopBits = 1):
         '''
@@ -86,6 +58,12 @@ class LPC804(ISPChip):
 
     def PrepSectorsForWrite(self, StartSector, EndSector):
         self.Write("P %d %d"%(StartSector, EndSector))
+        self.Wait()
+        resp = self.ReadLine().strip().split('\n')
+        code = int(resp[-1])
+        if(code != self.ReturnCodes["CMD_SUCCESS"]):
+            raise UserWarning("Return Code Failure in Unlock %d"%code)
+
 
     def CopyRAMToFlash(self, FlashAddress, RAMAddress, NumBytes):
         self.Write("C %d %d %d"%(FlashAddress, RAMAddress, NumBytes))
@@ -112,10 +90,26 @@ class LPC804(ISPChip):
         self.Write("I %d %d"%(StartSector, EndSector))
 
     def ReadPartID(self):
+        self.Wait()
+        self.Flush()
+        self.GetBufferIn()
         self.Write("J")
+        self.Wait()
+        frame = self.ReadLine().strip()
+        code, resp = frame.strip().split("\n")[-2:]
+        code = int(code.strip()) 
+        if(code != self.ReturnCodes["CMD_SUCCESS"]):
+            raise UserWarning("Read Part ID Failure %d"%code)
+        return int(resp.strip())
 
     def ReadBootCodeVersion(self):
+        self.Flush()
         self.Write("K")
+        self.Wait()
+        frame = self.ReadLine().strip()
+        resp, code = frame.split("\n")[-2:]
+        if(int(resp.strip()) != self.ReturnCodes["CMD_SUCCESS"]):
+            raise UserWarning("Failed Reading Boot Code Version")
 
     def Compare(self, Address1, Address2, NumBytes):
         '''
@@ -124,7 +118,16 @@ class LPC804(ISPChip):
         self.Write("M %d %d %d"%(Address1, Address2, NumBytes))
 
     def ReadUID(self):
+        self.GetBufferIn()
+        self.Wait()
         self.Write("N")
+        self.Wait()
+        self.Wait()
+        frame = self.ReadLine().strip().split("\n")
+        code = int(frame[0].strip())
+        if(code != self.ReturnCodes["CMD_SUCCESS"]):
+            raise UserWarning("Read UID Failure")
+        return " ".join(["0x%08x"%int(n) for n in frame[1:]]) 
 
     def ReadCRC(self, Address, NumBytes):
         self.Write("S %d %d"%(Address, NumBytes))
@@ -134,66 +137,4 @@ class LPC804(ISPChip):
 
     def ReadWriteFAIM(self):
         self.Write("O")
-
-    def InitConnection(self):
-        try:
-            try:
-                self.SyncConnection()
-            except (UserWarning, TimeoutError) as w:
-                print("Syncronization Failed, trying to connect to running ISP ({})".format(w))
-                self.ConnectToRunningISP()
-            self.CheckPartType()
-        except Exception as e:
-            print(e, type(e))
-        
-
-    def SyncConnection(self):
-        self.Flush()
-        self.Write("?")
-        FrameIn = self.ReadLine()
-        if(FrameIn != self.SyncString):
-            #Check for SyncString
-            raise UserWarning("Syncronization Failure")
-
-        self.Flush()
-        self.Write(self.SyncString)#echo SyncString
-        FrameIn = self.ReadLine()#discard echo
-
-        self.Flush()
-        self.Write("%d"%self.CrystalFrequency)
-        self.ReadLine()#discard echo
-        FrameIn = self.ReadLine()#Should be OK\r\n
-        
-        if(FrameIn != self.SyncVerified):
-            raise UserWarning("Syncronization Verification Failure")
-
-        print("Syncronization Successful")
-        self.Echo(False)
-
-
-    def ConnectToRunningISP(self):
-        self.Flush()
-        self.Echo(False)
-        self.Flush()
-        self.Echo(False)
-        if(self.ReadLine() != self.Return_Codes["CMD_SUCCESS"]):
-            raise UserWarning("Reconnection Failure")
-        
-        self.Flush()
-
-        print("Reconnection Successful")
-
-    def CheckPartType(self):
-        self.Flush()
-        self.Echo(False)
-        self.ReadLine()
-        self.Flush()
-
-        self.ReadPartID()
-        if(self.ReadLine() != self.Return_Codes["CMD_SUCCESS"]):
-            raise UserWarning("Read Part ID Failure")
-        PartID = self.ReadLine()
-
-        if(PartID != self.PartID):
-            raise UserWarning("{} Expected PartID {}, recieved {}".format(self.ChipName, self.PartID, PartID))
 

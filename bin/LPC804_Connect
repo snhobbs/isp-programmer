@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 from ISPProgrammer import LPC804
+import click
 
 chip = LPC804()
 
-chip.InitConnection()
+try:
+    chip.InitConnection()
+    chip.MassErase()
+except Exception as e:
+    print(e, type(e))
+    
