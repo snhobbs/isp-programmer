@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+from ISPProgrammer import LPC804
+
+chip = LPC804()
+
+chip.InitConnection()
