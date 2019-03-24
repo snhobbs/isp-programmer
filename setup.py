@@ -14,11 +14,11 @@ setup(name='ISPProgrammer',
         'pyserial',
         'numpy',
         'intelhex',
-        'timeoout_decorator',
+        'timeout_decorator',
     ],
     test_suite='nose.collector',
     tests_require=['nose'],
-    scripts=["bin/LPC804_Connect"],
+    scripts=["bin/LPC804_Connect", "bin/ISPProgrammer"],
     include_package_data=True,
     zip_safe=True
 )

@@ -2,26 +2,6 @@ from serial import Serial
 from collections import deque
 from timeout_decorator import timeout
 from time import sleep
-'''
-class Serial(object):
-    
-    def read_all(self):
-        return self.uart.read_all()
-
-    def run(self):
-        while True:
-            try:
-                frame = self.sock.recv(MAX_SEND_SIZE)
-                self.uart.write(frame)
-            except (BlockingIOError):
-                pass
-            try:
-                self.sock.send(self.read_all())
-            except (BlockingIOError):
-                pass
-'''
-            
-
 
 class ISPChip(object):
     NewLine = "\r\n"
