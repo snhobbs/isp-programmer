@@ -3,8 +3,8 @@ from . import NXPChip
 class LPC84x(NXPChip):
     ChipName = "LPC84x"
     Family = (
-        'LPC844',         
         'LPC845', 
+        'LPC844',         
     )
     CrystalFrequency = 30000#khz == 30MHz
     PartIDs = (

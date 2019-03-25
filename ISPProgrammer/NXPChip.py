@@ -99,10 +99,11 @@ class NXPChip(ISPChip):
         self.Write("A %d"%(on))
         return self.GetReturnCode("Set Echo")
 
-    def WriteToRam(self, StartLoc, NumBytes):
-        assert(NumBytes%4 == 0)
-        self.Write("W %d %d"%(StartLoc, NumBytes))
-        return self.GetReturnCode("Write to RAM")
+    def WriteToRam(self, StartLoc, Data):
+        assert(len(Data)%4 == 0)
+        self.Write("W %d %d"%(StartLoc, len(Data)))
+        self.GetReturnCode("Write to RAM")#get confirmation
+        #Stream data after confirmation
 
     def ReadMemory(self, StartLoc, NumBytes):
         self.Write("R %d %d"%(StartLoc, NumBytes))
@@ -139,7 +140,9 @@ class NXPChip(ISPChip):
         Checks to see if the sector is blank
         '''
         self.Write("I %d %d"%(StartSector, EndSector))
-        return self.GetReturnCode("Blank Check Sectors")
+        self.Wait()
+        resp = self.GetReturnCode("Blank Check Sectors")
+        return bool(resp) 
 
     def ReadPartID(self):
         self.Wait()
@@ -150,10 +153,20 @@ class NXPChip(ISPChip):
         return int(*resp)
 
     def ReadBootCodeVersion(self):
+        '''
+        LPC84x sends a 0x1a first for some reason. Also the boot version seems to be Minor then Major not like the docs say
+        '''
+        self.Wait()
         self.Flush()
+
         self.Write("K")
-        resp = self.GetReturnCode("Boot Code Version")
-        return int(*resp)
+        self.Wait()
+        resp = self.ReadLine().strip().split('\n')
+        uselessCode = resp[0]
+        code = int(resp[-3])
+        if(code != self.ReturnCodes["CMD_SUCCESS"]):
+            raise UserWarning("Return Code Failure in ReadBoot Code Version {}".format(self.GetErrorCodeName(code)))
+        return "%s.%s"%(resp[-1], resp[-2])
 
     def Compare(self, Address1, Address2, NumBytes):
         '''
@@ -173,9 +186,10 @@ class NXPChip(ISPChip):
         self.Write("S %d %d"%(Address, NumBytes))
         return self.GetReturnCode("Read CRC")
 
-    def ReadFlashSig(self):
-        self.Write("Z")
-        return self.GetReturnCode("Read Flash Sig")
+    def ReadFlashSig(self, StartAddress = 0, EndAddress = 0xffff, WaitStates = 2, Mode = 0):
+        assert(StartAddress < EndAddress)
+        self.Write("Z %d %d %d %d"%(StartAddress, EndAddress, WaitStates, Mode))
+        return self.GetReturnCode("Read Flash Sig")[0]
 
     def ReadWriteFAIM(self):
         self.Write("O")
@@ -187,7 +201,7 @@ class NXPChip(ISPChip):
                 self.SyncConnection()
             except (UserWarning, TimeoutError) as w:
                 pass
-                #print("Syncronization Failed, trying to connect to running ISP ({})".format(w))
+
             self.Wait()
             self.Flush()
             print("Connect to running ISP")
@@ -197,6 +211,12 @@ class NXPChip(ISPChip):
             self.CheckPartType()
             uid = self.ReadUID()
             print("Part UID: %s"%uid)
+            bootCodeVersion = self.ReadBootCodeVersion()
+            print("Boot Code Version: %s"%bootCodeVersion)
+            self.SetBaudRate(self.BaudRate)
+            print("Buadrate set to %d"%self.BaudRate)
+            flashSig = self.ReadFlashSig()
+            print("Flash Signiture: %s"%flashSig)
         except Exception as e:
             print(e, type(e))
             raise
@@ -239,14 +259,29 @@ class NXPChip(ISPChip):
         self.Flush()
         PartID = self.ReadPartID()
         if(PartID not in self.PartIDs):
-            raise UserWarning("%s recieved %08x"%(self.ChipName, PartID))
+            raise UserWarning("%s recieved 0x%08x"%(self.ChipName, PartID))
         
         print("Part Check Successful, 0x%08x"%(PartID))
+    
+
+    def WriteFlashSector(self, Data):
+        #self.WriteToRam(StartLoc, NumBytes)
+        #self.CopyRAMToFlash(FlashAddress, RAMAddress, NumBytes)
+        #self.Compare(Address1, Address2, NumBytes)
+
+    def WriteImage(self, ImageFile = None):
+        #self.PrepSectorsForWrite(0, self.SectorCount - 1)
+        #self.EraseSector(0, self.SectorCount - 1)
+        #self.BlankCheckSectors(0, self.SectorCount -1)
+
+        self.BlankCheckSectors(StartSector, EndSector)
 
     def MassErase(self):
         self.Wait()
         self.GetBufferIn()
         self.Unlock()
-        self.PrepSectorsForWrite(0, self.SectorCount)
-        self.EraseSector(0, self.SectorCount)
+        self.PrepSectorsForWrite(0, self.SectorCount - 1)
+        self.EraseSector(0, self.SectorCount - 1)
+        print("Checking Sectors are blank")
+        self.BlankCheckSectors(0, self.SectorCount -1)
 

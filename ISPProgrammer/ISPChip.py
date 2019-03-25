@@ -9,6 +9,10 @@ class ISPChip(object):
         self.uart = Serial(port, baudrate, xonxoff = False)
         self.bufferIn = deque()
 
+    @property
+    def BaudRate(self):
+        return self.uart.baudrate
+
     def WriteSerial(self, string):
         out = bytes(string, encoding="utf-8")
         self.uart.write(out)
