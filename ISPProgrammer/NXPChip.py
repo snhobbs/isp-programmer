@@ -37,6 +37,7 @@ NXPReturnCodes = {
 
 class NXPChip(ISPChip):
     PageSizeBytes = 64
+    SectorSizePages = 16
     MaxByteTransfer = 1024
     
     NewLine = "\r\n"
@@ -75,13 +76,19 @@ class NXPChip(ISPChip):
         return resp[1:]
 
     def Write(self, string):
-        self.WriteSerial(string + self.NewLine)
+        if type(string) != bytes:
+            out = bytes(string, encoding = "utf-8")
+        else:
+            out = string
+        self.WriteSerial(out)
+        print("Write:", out, bytes(self.NewLine, encoding = "utf-8"))
+        self.WriteSerial(bytes(self.NewLine, encoding = "utf-8"))
 
     def Unlock(self):
         '''
         Enables Flash Write, Erase, & Go
         '''
-        self.GetBufferIn()
+        self.ClearBuffer()
         self.Write("U 23130")
         return self.GetReturnCode("Unlock")
 
@@ -100,21 +107,62 @@ class NXPChip(ISPChip):
         return self.GetReturnCode("Set Echo")
 
     def WriteToRam(self, StartLoc, Data):
+        WordSize = 4
         assert(len(Data)%4 == 0)
-        self.Write("W %d %d"%(StartLoc, len(Data)))
-        self.GetReturnCode("Write to RAM")#get confirmation
-        #Stream data after confirmation
+        assert(StartLoc+len(Data) < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
+        
+        print("Write to RAM %d bytes"%len(Data))
+        i = 0
+        while i < len(Data):
+            self.Wait(.2)
+            self.Write("W %d %d"%(StartLoc + i, WordSize))
+            self.GetReturnCode("Write to RAM")#get confirmation
+            self.Write(Data[i:i+WordSize])#Stream data after confirmation
+            print(i, Data[i:i+WordSize])
+            i+=WordSize
+        self.Write("\r\n")
+        self.Read()
+        self.ClearBuffer()
 
     def ReadMemory(self, StartLoc, NumBytes):
-        self.Write("R %d %d"%(StartLoc, NumBytes))
-        return self.GetReturnCode("Read Memory")
+        assert(NumBytes%4 == 0)
+        assert(StartLoc+NumBytes < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
+        WordSize = 4
+        
+        i = 0
+        out = []
+        while i < NumBytes:
+            self.Flush()
+            self.Read()
+            self.ClearBuffer()
+            self.Flush()
+
+            self.Write("R %d %d"%(StartLoc + i, WordSize))
+            self.Wait(.2)
+            resp = self.GetReturnCode("Read Memory")
+            #line = self.ReadLine()
+            if(len(resp)):
+                respBytes = bytes(resp[0], encoding = "utf-8")
+                print(i, respBytes)
+                out.extend(respBytes)#get confirmation
+            i+=WordSize
+        print(len(list(out)), NumBytes)
+        assert(len(out) == NumBytes)
+        return out
 
     def PrepSectorsForWrite(self, StartSector, EndSector):
         self.Write("P %d %d"%(StartSector, EndSector))
         return self.GetReturnCode("Prep Sectors")
 
     def CopyRAMToFlash(self, FlashAddress, RAMAddress, NumBytes):
+        assert(RAMAddress+NumBytes < self.RAMRange[1] and RAMAddress >= self.RAMRange[0])
+        assert(FlashAddress + NumBytes < self.FlashRange[1] and FlashAddress >= self.FlashRange[0])
+
+        assert(FlashAddress%64 == 0)
+        assert(RAMAddress%4 == 0)
+
         self.Write("C %d %d %d"%(FlashAddress, RAMAddress, NumBytes))
+        self.Wait(2)
         return self.GetReturnCode("Copy RAM To Flash")
 
     def Go(self, Address, ThumbMode = False):
@@ -141,13 +189,12 @@ class NXPChip(ISPChip):
         '''
         self.Write("I %d %d"%(StartSector, EndSector))
         self.Wait()
-        resp = self.GetReturnCode("Blank Check Sectors")
-        return bool(resp) 
+        self.GetReturnCode("Blank Check Sectors")
 
     def ReadPartID(self):
         self.Wait()
         self.Flush()
-        self.GetBufferIn()
+        self.ClearBuffer()
         self.Write("J")
         resp = self.GetReturnCode("Blank Check Sectors")
         return int(*resp)
@@ -176,7 +223,7 @@ class NXPChip(ISPChip):
         return self.GetReturnCode("Compare")
 
     def ReadUID(self):
-        self.GetBufferIn()
+        self.ClearBuffer()
         self.Wait()
         self.Write("N")
         resp = self.GetReturnCode("Read UID")
@@ -250,8 +297,18 @@ class NXPChip(ISPChip):
     def ConnectToRunningISP(self):
         self.Wait()
         self.Flush()
-        self.GetBufferIn()
-        self.Echo(False)
+        self.ClearBuffer()
+        try:
+            self.ReadLine()
+        except TimeoutError:
+            pass
+        try:
+            self.Write(self.NewLine)
+            self.Read()
+            #self.ReadLine()
+            self.Echo(False)
+        except ValueError:
+            pass
 
     def CheckPartType(self):
         self.Echo(False)
@@ -262,23 +319,63 @@ class NXPChip(ISPChip):
             raise UserWarning("%s recieved 0x%08x"%(self.ChipName, PartID))
         
         print("Part Check Successful, 0x%08x"%(PartID))
-    
 
-    def WriteFlashSector(self, Data):
-        #self.WriteToRam(StartLoc, NumBytes)
-        #self.CopyRAMToFlash(FlashAddress, RAMAddress, NumBytes)
-        #self.Compare(Address1, Address2, NumBytes)
+    def WriteFlashSector(self, sector, Data):
+        RAMAddress = self.RAMStartWrite
+        sectorSizeBytes = self.PageSizeBytes*self.SectorSizePages
+        FlashAddress = self.FlashRange[0] + sector*sectorSizeBytes
+        print("Writing Sector: %d\nFlash Address: %d\nRAM Address: %d\n"%(sector, FlashAddress, RAMAddress))
+
+        self.BlankCheckSectors(sector, sector)
+        print("Sector Blank")
+        self.WriteToRam(RAMAddress, Data)
+        print("RAM Written")
+        resp = self.ReadMemory(RAMAddress, len(Data))
+
+        DataRead = bytes(resp[0], encoding = "utf-8")
+        print(Data, DataRead)
+        if(Data != DataRead):
+            raise UserWarning("RAM Write/Read Check Failed")
+
+        print("RAM Written")
+        self.PrepSectorsForWrite(sector, sector)
+        print("Sectors Preped")
+        self.CopyRAMToFlash(FlashAddress, RAMAddress, sectorSizeBytes)
+        print("Copied to Flash")
+        self.Compare(FlashAddress, RAMAddress, sectorSizeBytes)
+        print("Compare Sucessful")
 
     def WriteImage(self, ImageFile = None):
-        #self.PrepSectorsForWrite(0, self.SectorCount - 1)
-        #self.EraseSector(0, self.SectorCount - 1)
-        #self.BlankCheckSectors(0, self.SectorCount -1)
+        self.Unlock()
+        self.Wait()
+        sector = 0
+        writeCount = 0
 
-        self.BlankCheckSectors(StartSector, EndSector)
+        SectorBytes = self.PageSizeBytes#self.SectorSizePages*self.PageSizeBytes
+        with open(ImageFile, 'rb') as f:
+            prog = f.read()
+            assert(SectorBytes%4 == 0)
+            print("Program Length: ", len(prog))
+            while(True):
+                print("Sector ", sector)
+                DataChunk = prog[writeCount : writeCount + SectorBytes]
+                assert(sector < self.SectorCount)
+                self.PrepSectorsForWrite(sector, sector)
+                self.Wait()
+                self.EraseSector(sector, sector)
+                self.Wait()
+                self.BlankCheckSectors(sector, sector)
+                print("Write Flash")
+                self.WriteFlashSector(sector, DataChunk)
+                print("Flash Written")
+                self.Wait()
+
+                writeCount += SectorBytes
+                sector += 1
 
     def MassErase(self):
         self.Wait()
-        self.GetBufferIn()
+        self.ClearBuffer()
         self.Unlock()
         self.PrepSectorsForWrite(0, self.SectorCount - 1)
         self.EraseSector(0, self.SectorCount - 1)

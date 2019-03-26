@@ -1,5 +1,5 @@
 from . import NXPChip 
-
+KILOBYTE = 1024
 class LPC84x(NXPChip):
     ChipName = "LPC84x"
     Family = (
@@ -18,3 +18,9 @@ class LPC84x(NXPChip):
     )
 
     SectorCount = 64
+    RAMSize = 16*KILOBYTE
+    RAMRange = (0x10000000, 0x10004000)
+    FlashRange = (0x0, SectorCount*NXPChip.PageSizeBytes*NXPChip.SectorSizePages)
+    RAMStartWrite = 0x10000800#the ISP stack starts 
+    assert(FlashRange[1] == 0x00010000)
+    assert(RAMRange[1]-RAMRange[0] == RAMSize)

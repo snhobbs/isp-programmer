@@ -7,18 +7,23 @@ class ISPChip(object):
     NewLine = "\r\n"
     def __init__(self, port = "/dev/ttyUSB0", baudrate = 9600):
         self.uart = Serial(port, baudrate, xonxoff = False)
-        self.bufferIn = deque()
+        self.frame = []
+        self.DataBufferIn = deque()
 
     @property
     def BaudRate(self):
         return self.uart.baudrate
 
-    def WriteSerial(self, string):
-        out = bytes(string, encoding="utf-8")
+    def ChangeBaudRate(self, baudrate):
+        self.SetBaudRate(baudrate)
+        self.uart.baudrate = baudrate
+
+    def WriteSerial(self, out):
+        assert(type(out) == bytes)
         self.uart.write(out)
 
-    def Wait(self):
-        sleep(0.05)
+    def Wait(self, time = 0.05):
+        sleep(time)
 
     def Flush(self):
         self.uart.flush()
@@ -33,10 +38,13 @@ class ISPChip(object):
         raise NotImplementedError
 
     def GetBufferIn(self):
-        frame = []
-        while(len(self.bufferIn)):
-            frame.append(self.bufferIn.popleft())
-        return "".join([chr(p) for p in frame])
+        frame = "".join([str(ch) for ch in self.frame])
+        self.frame.clear()
+        return frame
+
+    def ClearBuffer(self):
+        self.DataBufferIn.clear()
+        self.frame.clear()
 
     def Read(self):
         '''
@@ -44,12 +52,18 @@ class ISPChip(object):
         '''
         fNewFrame = False
 
-        chIn = self.uart.read_all()
-        for ch in chIn:
-            #print(hex(ch))
-            self.bufferIn.append(ch)
+        din = self.uart.read_all()
+        if(len(din)):
+            print(din)
+        self.DataBufferIn.extend(din)
+        while(len(self.DataBufferIn)):
+            ch = self.DataBufferIn.popleft()
+            print(hex(ch), chr(ch))
+            self.frame.append(ch)
             if(chr(ch) == self.NewLine[-1]):
+                print("New Frame")
                 fNewFrame = True
+                #break
         return fNewFrame
          
     def Check(self, *args, **kwargs):

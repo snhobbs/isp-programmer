@@ -4,26 +4,12 @@ import click
 
 INSTALLED_FAMILIES = (
     LPC80x, 
-    LPC84x
+    LPC84x,
 )
+BAUD = 9600
+#BAUD = 115200
+#BAUD = 230400
 
-LPC175_6X_FAMILY = (
-    'LPC1769',
-    'LPC1768',
-    'LPC1767',
-    'LPC1766',
-    'LPC1765', 
-    'LPC1764',
-    'LPC1763',
-    'LPC1759',
-    'LPC1758',
-    'LPC1757',
-    'LPC1756',
-    'LPC1755',
-    'LPC1754',
-    'LPC1753',        
-)
-        
 CHIPS = []
 for family in INSTALLED_FAMILIES:
     CHIPS.extend(family.Family)
@@ -33,23 +19,33 @@ def gr1():
     pass
 
 
-@click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
-@gr1.command()
 def SetupChip(chipname):
     chip = None
-    if chipname in LPC80x.Family:
-        chip = LPC80x()
-
-    elif chipname in LPC84x.Family:
-        chip = LPC84x()
-
-    else:
+    for ChipFamily in INSTALLED_FAMILIES:
+        if chipname in ChipFamily.Family:
+            chip = ChipFamily("/dev/ttyUSB0", baudrate = BAUD) 
+    
+    if(chip is None):
         raise UserWarning("Chip %s unknown"%chipname)
 
     chip.InitConnection()
     print("Initiated %s"%chipname)
-    
+    chip.ChangeBaudRate(BAUD)
+
     return chip
+
+def DataReadWriteCheck(chip):
+    WriteData = bytes((0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7))
+    chip.WriteToRam(chip.RAMRange[0], WriteData)
+    resp = chip.ReadMemory(chip.RAMRange[0], len(WriteData))
+    DataRead = bytes(resp[0], encoding = "utf-8")
+    if(WriteData != DataRead):
+        raise UserWarning("RAM Write/Read Check Failed")
+
+@click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
+@gr1.command()
+def QueryChip(chipname):
+    chip = SetupChip(chipname)
 
 @click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
 @gr1.command()
@@ -57,6 +53,17 @@ def MassErase(chipname):
     chip = SetupChip(chipname)
     chip.MassErase()
     print("Mass Erase Successful")
+
+@click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
+@click.option('--imagein', type = str, required = True, help='Location of hex file to program')
+@gr1.command()
+def WriteImage(chipname, imagein):
+    baudrate = 115200
+    chip = SetupChip(chipname)
+    #DataReadWriteCheck(chip)
+    #print("Set baudrate to %d"%baudrate)
+    #chip.SetBaudRate(115200)
+    chip.WriteImage(imagein)
 
 if __name__ == "__main__":
     gr1()
