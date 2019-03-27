@@ -30,15 +30,15 @@ class ISPChip(object):
 
     @timeout(0.25)
     def ReadLine(self):
-        while(not self.Read()):
-            continue
+        while(not self.ReadFrame()):
+            self.Read()
         return self.GetBufferIn()
 
     def Write(self, *args, **kwargs):
         raise NotImplementedError
 
     def GetBufferIn(self):
-        frame = "".join([str(ch) for ch in self.frame])
+        frame = "".join([chr(ch) for ch in self.frame])
         self.frame.clear()
         return frame
 
@@ -47,23 +47,22 @@ class ISPChip(object):
         self.frame.clear()
 
     def Read(self):
+        self.DataBufferIn.extend(self.uart.read_all())
+
+    def ReadFrame(self):
         '''
         Fill the recieving buffer until 
         '''
         fNewFrame = False
 
-        din = self.uart.read_all()
-        if(len(din)):
-            print(din)
-        self.DataBufferIn.extend(din)
         while(len(self.DataBufferIn)):
             ch = self.DataBufferIn.popleft()
-            print(hex(ch), chr(ch))
+            #print(hex(ch), chr(ch))
             self.frame.append(ch)
             if(chr(ch) == self.NewLine[-1]):
-                print("New Frame")
+                #print("New Frame")
                 fNewFrame = True
-                #break
+                break
         return fNewFrame
          
     def Check(self, *args, **kwargs):

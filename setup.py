@@ -15,10 +15,11 @@ setup(name='ISPProgrammer',
         'numpy',
         'intelhex',
         'timeout_decorator',
+        'pycrc',
     ],
     test_suite='nose.collector',
     tests_require=['nose'],
-    scripts=["bin/LPC804_Connect", "bin/ISPProgrammer"],
+    scripts=["bin/ISPProgrammer"],
     include_package_data=True,
     zip_safe=True
 )
