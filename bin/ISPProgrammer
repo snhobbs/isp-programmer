@@ -15,7 +15,7 @@ BAUDRATES = (
     230400,
     460800
 )
-BAUD = BAUDRATES[3]# breaks with 115200
+DEFAULT_BAUD = BAUDRATES[3]# breaks with 115200
 
 CHIPS = []
 for family in INSTALLED_FAMILIES:
@@ -26,50 +26,42 @@ def gr1():
     pass
 
 
-def SetupChip(chipname):
+def SetupChip(chipname, device = "/dev/ttyUSB0"):
     chip = None
     for ChipFamily in INSTALLED_FAMILIES:
         if chipname in ChipFamily.Family:
-            chip = ChipFamily("/dev/ttyUSB0", baudrate = BAUD) 
+            chip = ChipFamily(device, baudrate = ChipFamily.MAXBAUDRATE) 
     
     if(chip is None):
         raise UserWarning("Chip %s unknown"%chipname)
 
     chip.InitConnection()
     print("Initiated %s"%chipname)
-    chip.ChangeBaudRate(BAUD)
+    chip.ChangeBaudRate(ChipFamily.MAXBAUDRATE)
 
     return chip
 
-def DataReadWriteCheck(chip):
-    WriteData = bytes((0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7))
-    chip.WriteToRam(chip.RAMRange[0], WriteData)
-    resp = chip.ReadMemory(chip.RAMRange[0], len(WriteData))
-    DataRead = bytes(resp[0], encoding = "utf-8")
-    if(WriteData != DataRead):
-        raise UserWarning("RAM Write/Read Check Failed")
-
+@click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
 @click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
 @gr1.command()
-def QueryChip(chipname):
-    chip = SetupChip(chipname)
+def QueryChip(device, chipname):
+    chip = SetupChip(chipname, device)
 
+@click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
 @click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
 @gr1.command()
-def MassErase(chipname):
-    chip = SetupChip(chipname)
+def MassErase(device, chipname):
+    chip = SetupChip(chipname, device)
     chip.MassErase()
     print("Mass Erase Successful")
 
+#@click.option('--baudrate', '-b', type = click.Choice(BAUDRATES), default = None, help='Baudrate to run at. Some chips don\'t operate properly at higher rates.')
+@click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
 @click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
 @click.option('--imagein', type = str, required = True, help='Location of hex file to program')
 @gr1.command()
-def WriteImage(chipname, imagein):
-    baudrate = 115200
-    chip = SetupChip(chipname)
-    #DataReadWriteCheck(chip)
-    #print("Set baudrate to %d"%baudrate)
-    #chip.SetBaudRate(115200)
+def WriteImage(device, chipname, imagein):
+    chip = SetupChip(chipname, device)
     chip.WriteImage(imagein)
 
 if __name__ == "__main__":
