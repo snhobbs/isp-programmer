@@ -266,8 +266,8 @@ class NXPChip(ISPChip):
             print("Boot Code Version: %s"%bootCodeVersion)
             self.SetBaudRate(self.BaudRate)
             print("Buadrate set to %d"%self.BaudRate)
-            flashSig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
-            print("Flash Signiture: %s"%flashSig)
+            #flashSig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
+            #print("Flash Signiture: %s"%flashSig)
         except Exception as e:
             print(e, type(e))
             raise
@@ -383,10 +383,7 @@ class NXPChip(ISPChip):
                 writeCount += SectorBytes
                 sector += 1
 
-        flashSig = self.ReadFlashSig(StartAddress = self.FlashRange[0], EndAddress = self.FlashRange[0] + sector*SectorBytes, WaitStates = 2, Mode = 0)
-        print("Programming Complete. Flash Signature: %d"%int(flashSig))
-        #print("Starting execution at 0x%x"%self.StartExecution)
-        #self.Go(self.StartExecution, True)
+        print("Programming Complete.")
 
     def MassErase(self):
         self.Wait()

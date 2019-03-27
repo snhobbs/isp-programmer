@@ -26,3 +26,4 @@ class LPC84x(NXPChip):
 
     assert(FlashRange[1] == 0x00010000-1)
     assert(RAMRange[1]-RAMRange[0] == RAMSize)
+

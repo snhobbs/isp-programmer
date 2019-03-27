@@ -22,4 +22,4 @@ class LPC80x(NXPChip):
     RAMStartWrite = 0x100003A8#the ISP stack starts 
     #assert(FlashRange[1] == 0x00008000-2)
     def ReadFlashSig(*args, **kwargs):
-        return 0x0
+        raise NotImplementedError("804 does not fully support read flash signature")
