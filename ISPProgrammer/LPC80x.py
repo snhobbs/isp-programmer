@@ -6,6 +6,7 @@ class LPC80x(NXPChip):
     Family = (
         'LPC804',
     )
+    MAXBAUDRATE = 57600
     CrystalFrequency = 30000#khz == 30MHz
     PartIDs = (
         0x00008040,
