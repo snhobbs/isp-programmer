@@ -356,15 +356,16 @@ class NXPChip(ISPChip):
         else:
             print("CRC Check Passed")
 
-    def WriteImage(self, ImageFile = None):
+    def WriteImage(self, ImageFile):
         self.Unlock()
         sector = 0
         writeCount = 0
 
         SectorBytes = self.SectorSizePages*self.PageSizeBytes
+        assert(SectorBytes%4 == 0)
+        
         with open(ImageFile, 'rb') as f:
             prog = f.read()
-            assert(SectorBytes%4 == 0)
             print("Program Length: ", len(prog))
             while(True):
                 print("Sector ", sector)
@@ -384,6 +385,23 @@ class NXPChip(ISPChip):
                 sector += 1
 
         print("Programming Complete.")
+
+    def ReadImage(self, ImageFile):
+        sector = 0
+        writeCount = 0
+        SectorBytes = self.SectorSizePages*self.PageSizeBytes
+        assert(SectorBytes%4 == 0)
+        
+        with open(ImageFile, 'wb') as f:
+            for sector in range(self.SectorCount):
+                print("Sector ", sector)
+                try:
+                    self.BlankCheckSectors(sector, sector)
+                except UserWarning:
+                    break
+                
+                DataChunk = self.ReadMemory(sector, SectorBytes)
+                f.write(DataChunk)
 
     def MassErase(self):
         self.Wait()

@@ -55,7 +55,6 @@ def MassErase(device, chipname):
     chip.MassErase()
     print("Mass Erase Successful")
 
-#@click.option('--baudrate', '-b', type = click.Choice(BAUDRATES), default = None, help='Baudrate to run at. Some chips don\'t operate properly at higher rates.')
 @click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
 @click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
 @click.option('--imagein', type = str, required = True, help='Location of hex file to program')
@@ -63,6 +62,14 @@ def MassErase(device, chipname):
 def WriteImage(device, chipname, imagein):
     chip = SetupChip(chipname, device)
     chip.WriteImage(imagein)
+
+@click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
+@click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
+@click.option('--imageout', type = str, required = True, help='Name of hex file output')
+@gr1.command()
+def ReadImage(device, chipname, imageout):
+    chip = SetupChip(chipname, device)
+    chip.ReadImage(imageout)
 
 if __name__ == "__main__":
     gr1()
