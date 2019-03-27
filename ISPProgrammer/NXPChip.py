@@ -1,6 +1,7 @@
 from . import ISPChip
 from timeout_decorator import TimeoutError
-from pprint import pprint
+import zlib
+
 NXPReturnCodes = {
         "CMD_SUCCESS"                               : 0x0,
         "INVALID_COMMAND"                           : 0x1,
@@ -40,8 +41,8 @@ class NXPChip(ISPChip):
     PageSizeBytes = 64
     SectorSizePages = 16
     MaxByteTransfer = 1024
-    
     NewLine = "\r\n"
+    StatusRespLength = len(NewLine) + 1
     Parity = None
     DataBits = 8
     StopBits = 1
@@ -74,6 +75,7 @@ class NXPChip(ISPChip):
         assert(len(resp) == 1)
         code = int(resp[0])
         if(code != self.ReturnCodes["CMD_SUCCESS"]):
+            print(resp)
             raise UserWarning("Return Code Failure in {} {}".format(CallLoc, self.GetErrorCodeName(code)))
 
     def Write(self, string):
@@ -82,13 +84,13 @@ class NXPChip(ISPChip):
         else:
             out = string
         self.WriteSerial(out)
-        #print("Write:", out, bytes(self.NewLine, encoding = "utf-8"))
         self.WriteSerial(bytes(self.NewLine, encoding = "utf-8"))
 
     def Unlock(self):
         '''
         Enables Flash Write, Erase, & Go
         '''
+        #self.Wait()
         self.ClearBuffer()
         self.Write("U 23130")
         self.GetReturnCode("Unlock")
@@ -136,28 +138,20 @@ class NXPChip(ISPChip):
         self.ClearBuffer()
         self.Flush()
 
-        while i < NumBytes:
-            self.Write("R %d %d"%(StartLoc + i, WordSize))
-            #self.GetReturnCode("Read Memory")
-            self.Wait()
+        self.Write("R %d %d"%(StartLoc, NumBytes))
+
+        while(len(self.DataBufferIn) < NumBytes + self.StatusRespLength):
             self.Read()
-            #self.Flush()
-            i+=WordSize
-            assert(i%4 == 0)
-        try:
-            i = 0
-            while(True):
-                i+=1
-                resp = self.ReadLine().strip()
-                respBytes = bytes(resp, encoding = "utf-8")
-                print(i, "Response", (respBytes), len(respBytes), ":", *respBytes)
-                out.extend(respBytes)#get confirmation
-        except TimeoutError:
-            pass
-        print(len(list(out)), NumBytes)
-        pprint(list(out))
-        assert(len(out) == NumBytes)
-        return out
+        #self.Wait()
+        self.GetReturnCode("Read Memory")
+        
+        data = []
+        while(len(self.DataBufferIn)):
+            ch = self.DataBufferIn.popleft()
+            data.append(ch)
+
+        assert(len(data) == NumBytes)
+        return bytes(data)
 
     def PrepSectorsForWrite(self, StartSector, EndSector):
         self.Write("P %d %d"%(StartSector, EndSector))
@@ -197,11 +191,9 @@ class NXPChip(ISPChip):
         Checks to see if the sector is blank
         '''
         self.Write("I %d %d"%(StartSector, EndSector))
-        #self.Wait()
         self.GetReturnCode("Blank Check Sectors")
 
     def ReadPartID(self):
-        #self.Wait()
         self.Flush()
         self.ClearBuffer()
         self.Write("J")
@@ -213,11 +205,9 @@ class NXPChip(ISPChip):
         '''
         LPC84x sends a 0x1a first for some reason. Also the boot version seems to be Minor then Major not like the docs say
         '''
-        #self.Wait()
         self.Flush()
 
         self.Write("K")
-        #self.Wait()
         self.GetReturnCode("Read Bootcode Version")
         Minor = self.ReadLine().strip()
         Major = self.ReadLine().strip()
@@ -232,7 +222,6 @@ class NXPChip(ISPChip):
 
     def ReadUID(self):
         self.ClearBuffer()
-        #self.Wait()
         self.Write("N")
         self.GetReturnCode("Read UID")
         UID0 = self.ReadLine().strip()
@@ -242,12 +231,15 @@ class NXPChip(ISPChip):
         return " ".join(["0x%08x"%int(uid) for uid in [UID0, UID1, UID2, UID3]]) 
 
     def ReadCRC(self, Address, NumBytes):
+        self.ClearBuffer()
         self.Write("S %d %d"%(Address, NumBytes))
         self.GetReturnCode("Read CRC")
         return self.ReadLine()
 
-    def ReadFlashSig(self, StartAddress = 0, EndAddress = 0xffff, WaitStates = 2, Mode = 0):
+    def ReadFlashSig(self, StartAddress, EndAddress, WaitStates = 2, Mode = 0):
         assert(StartAddress < EndAddress)
+        assert(StartAddress >= self.FlashRange[0])
+        assert(EndAddress <= self.FlashRange[1])
         self.Write("Z %d %d %d %d"%(StartAddress, EndAddress, WaitStates, Mode))
         self.GetReturnCode("Read Flash Sig")
         return self.ReadLine()
@@ -261,10 +253,8 @@ class NXPChip(ISPChip):
             try:
                 self.SyncConnection()
             except (UserWarning, TimeoutError) as w:
-                pass
+                print("Sync Failed", w)
 
-            self.Wait()
-            self.Flush()
             print("Connect to running ISP")
             self.ConnectToRunningISP()
             print("Reconnection Successful")
@@ -276,19 +266,16 @@ class NXPChip(ISPChip):
             print("Boot Code Version: %s"%bootCodeVersion)
             self.SetBaudRate(self.BaudRate)
             print("Buadrate set to %d"%self.BaudRate)
-            flashSig = self.ReadFlashSig()
+            flashSig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
             print("Flash Signiture: %s"%flashSig)
         except Exception as e:
             print(e, type(e))
             raise
         
     def SyncConnection(self):
-        self.Wait()
-        self.Flush()
         self.Write("?")
         FrameIn = self.ReadLine()
 
-        #print(FrameIn)
         if(FrameIn.strip() != self.SyncString.strip()):
             #Check for SyncString
             raise UserWarning("Syncronization Failure")
@@ -296,17 +283,20 @@ class NXPChip(ISPChip):
         self.Flush()
         self.Write(self.SyncString)#echo SyncString
         FrameIn = self.ReadLine()#discard echo
-
+        self.ClearBuffer()
         self.Flush()
+
         self.Write("%d"%self.CrystalFrequency)
-        self.ReadLine()#discard echo
         FrameIn = self.ReadLine()#Should be OK\r\n
-        
         if(FrameIn.strip() != self.SyncVerified.strip()):
             raise UserWarning("Syncronization Verification Failure")
 
-        print("Syncronization Successful")
         self.Echo(False)
+        try:
+            self.Echo(False)
+        except ValueError:
+            pass
+        print("Syncronization Successful")
 
     def ConnectToRunningISP(self):
         self.Wait()
@@ -319,15 +309,14 @@ class NXPChip(ISPChip):
         try:
             self.Write(self.NewLine)
             self.Read()
-            #self.ReadLine()
+            self.ClearBuffer()
             self.Echo(False)
         except ValueError:
-            pass
+            self.Flush()
+            self.Read()
+            self.ClearBuffer()
 
     def CheckPartType(self):
-        self.Echo(False)
-        self.Wait()
-        self.Flush()
         PartID = self.ReadPartID()
         if(PartID not in self.PartIDs):
             raise UserWarning("%s recieved 0x%08x"%(self.ChipName, PartID))
@@ -351,15 +340,21 @@ class NXPChip(ISPChip):
         '''
         Read Memory and compare it to what was written
         '''
-        #resp = self.ReadMemory(FlashAddress, len(Data))
+        DataRead = self.ReadMemory(FlashAddress, len(Data))
 
-        #DataRead = bytes(resp[0], encoding = "utf-8")
-        #print(Data, DataRead)
-        #if(Data != DataRead):
-        #    raise UserWarning("RAM Write/Read Check Failed")
+        assert(len(Data) == len(DataRead))
+        assert(type(Data) == type(DataRead))
+        if(Data != DataRead):
+            raise UserWarning("Flash Read Check Failed")
+        else:
+            print("Flash Read Successful")
 
-        #self.ReadFlashSig(StartAddress = 0, EndAddress = 0xffff, WaitStates = 2, Mode = 0)
-
+        crcCalc = zlib.crc32(Data)
+        crcChip = self.ReadCRC(FlashAddress, NumBytes = len(Data))
+        if(crcCalc != int(crcChip)):
+            raise UserWarning("CRC Check Failed for sector %d".format(sector))
+        else:
+            print("CRC Check Passed")
 
     def WriteImage(self, ImageFile = None):
         self.Unlock()
@@ -387,6 +382,11 @@ class NXPChip(ISPChip):
 
                 writeCount += SectorBytes
                 sector += 1
+
+        flashSig = self.ReadFlashSig(StartAddress = self.FlashRange[0], EndAddress = self.FlashRange[0] + sector*SectorBytes, WaitStates = 2, Mode = 0)
+        print("Programming Complete. Flash Signature: %d"%int(flashSig))
+        #print("Starting execution at 0x%x"%self.StartExecution)
+        #self.Go(self.StartExecution, True)
 
     def MassErase(self):
         self.Wait()

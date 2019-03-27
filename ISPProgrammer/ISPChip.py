@@ -22,7 +22,7 @@ class ISPChip(object):
         assert(type(out) == bytes)
         self.uart.write(out)
 
-    def Wait(self, time = 0.05):
+    def Wait(self, time = 0.004):
         sleep(time)
 
     def Flush(self):

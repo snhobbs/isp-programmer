@@ -6,9 +6,16 @@ INSTALLED_FAMILIES = (
     LPC80x, 
     LPC84x,
 )
-BAUD = 9600
-#BAUD = 115200
-#BAUD = 230400
+BAUDRATES = (
+    9600,
+    19200,
+    38400,
+    57600,
+    115200,
+    230400,
+    460800
+)
+BAUD = BAUDRATES[3]# breaks with 115200
 
 CHIPS = []
 for family in INSTALLED_FAMILIES:

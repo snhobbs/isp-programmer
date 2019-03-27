@@ -20,7 +20,9 @@ class LPC84x(NXPChip):
     SectorCount = 64
     RAMSize = 16*KILOBYTE
     RAMRange = (0x10000000, 0x10004000)
-    FlashRange = (0x0, SectorCount*NXPChip.PageSizeBytes*NXPChip.SectorSizePages)
+    FlashRange = (0x0, SectorCount*NXPChip.PageSizeBytes*NXPChip.SectorSizePages-1)
     RAMStartWrite = 0x10000800#the ISP stack starts 
-    assert(FlashRange[1] == 0x00010000)
+    #StartExecution = 0x0F000000
+
+    assert(FlashRange[1] == 0x00010000-1)
     assert(RAMRange[1]-RAMRange[0] == RAMSize)

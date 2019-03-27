@@ -1,4 +1,5 @@
 from . import NXPChip 
+KILOBYTE = 1024
 
 class LPC80x(NXPChip):
     ChipName = "LPC80x"
@@ -15,3 +16,10 @@ class LPC80x(NXPChip):
     )
 
     SectorCount = 32
+    RAMSize = 4*KILOBYTE
+    RAMRange = (0x10000000, 0x10001000)
+    FlashRange = (0x0, SectorCount*NXPChip.PageSizeBytes*NXPChip.SectorSizePages-1)
+    RAMStartWrite = 0x100003A8#the ISP stack starts 
+    #assert(FlashRange[1] == 0x00008000-2)
+    def ReadFlashSig(*args, **kwargs):
+        return 0x0
