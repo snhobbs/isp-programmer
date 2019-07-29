@@ -28,7 +28,8 @@ class ISPChip(object):
     def Flush(self):
         self.uart.flush()
 
-    @timeout(0.25)
+    #@timeout(0.25)
+    @timeout(1)
     def ReadLine(self):
         while(not self.ReadFrame()):
             self.Read()
