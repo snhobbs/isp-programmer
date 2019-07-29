@@ -35,6 +35,6 @@ class LPC175_6x(NXPChip):
         0x25001118,
         0x25001110,
     )
-
+    MAXBAUDRATE = 9600
     SectorCount = 512
  

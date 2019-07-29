@@ -111,16 +111,21 @@ class NXPChip(ISPChip):
 
     def WriteToRam(self, StartLoc, Data):
         WordSize = 4
-        assert(len(Data)%4 == 0)
+        assert(len(Data)%WordSize == 0)
         assert(StartLoc+len(Data) < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
         
         print("Write to RAM %d bytes"%len(Data))
         i = 0
-        while i < len(Data):
-            self.Write("W %d %d"%(StartLoc + i, WordSize))
-            self.GetReturnCode("Write to RAM")#get confirmation
-            self.Write(Data[i:i+WordSize])#Stream data after confirmation
-            i+=WordSize
+        #while i < len(Data):
+        #    self.Write("W %d %d"%(StartLoc + i, WordSize))
+        #    self.GetReturnCode("Write to RAM")#get confirmation
+        #    self.Write(Data[i:i+WordSize])#Stream data after confirmation
+        #    i+=WordSize
+        
+        self.Write("W %d %d"%(StartLoc, len(Data)))
+        self.GetReturnCode("Write to RAM")#get confirmation
+        self.Write(Data)#Stream data after confirmation
+
         self.Write("\r\n")
         self.Read()
         self.ClearBuffer()
@@ -322,6 +327,20 @@ class NXPChip(ISPChip):
             raise UserWarning("%s recieved 0x%08x"%(self.ChipName, PartID))
         
         print("Part Check Successful, 0x%08x"%(PartID))
+    def CheckFlashWrite(Data, FlashAddress):
+        '''
+        Read Memory and compare it to what was written
+        '''
+
+        DataRead = self.ReadMemory(FlashAddress, len(Data))
+
+        assert(len(Data) == len(DataRead))
+        assert(type(Data) == type(DataRead))
+        if(Data != DataRead):
+            return False
+        else:
+            return True
+
 
     def WriteFlashSector(self, sector, Data):
         RAMAddress = self.RAMStartWrite
@@ -330,24 +349,22 @@ class NXPChip(ISPChip):
         print("Writing Sector: %d\nFlash Address: %d\nRAM Address: %d\n"%(sector, FlashAddress, RAMAddress))
 
         self.BlankCheckSectors(sector, sector)
+        Data += bytes(sectorSizeBytes - len(Data))
+
         self.WriteToRam(RAMAddress, Data)
 
+
+        print("Prep Sector")
         self.PrepSectorsForWrite(sector, sector)
+        print("Write to Flash")
         self.CopyRAMToFlash(FlashAddress, RAMAddress, sectorSizeBytes)
         self.Compare(FlashAddress, RAMAddress, sectorSizeBytes)
         print("Compare Sucessful")
 
-        '''
-        Read Memory and compare it to what was written
-        '''
-        DataRead = self.ReadMemory(FlashAddress, len(Data))
+        #if(not CheckFlashWrite(Data, FlashAddress)):
+        #    raise UserWarning("Flash Read Check Failed")
+        #print("Flash Read Successful")
 
-        assert(len(Data) == len(DataRead))
-        assert(type(Data) == type(DataRead))
-        if(Data != DataRead):
-            raise UserWarning("Flash Read Check Failed")
-        else:
-            print("Flash Read Successful")
 
         crcCalc = zlib.crc32(Data)
         crcChip = self.ReadCRC(FlashAddress, NumBytes = len(Data))
