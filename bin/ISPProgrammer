@@ -32,13 +32,15 @@ def SetupChip(chipname, device = "/dev/ttyUSB0"):
     for ChipFamily in INSTALLED_FAMILIES:
         if chipname in ChipFamily.Family:
             chip = ChipFamily(device, baudrate = ChipFamily.MAXBAUDRATE) 
+            break
     
     if(chip is None):
         raise UserWarning("Chip %s unknown"%chipname)
 
     chip.InitConnection()
     print("Initiated %s"%chipname)
-    chip.ChangeBaudRate(ChipFamily.MAXBAUDRATE)
+    chip.ChangeBaudRate(chip.MAXBAUDRATE)
+    print("Setup chip Baudrate set to:", chip.MAXBAUDRATE)
 
     return chip
 

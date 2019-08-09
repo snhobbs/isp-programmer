@@ -12,6 +12,8 @@ class LPC84x(NXPChip):
 
     #MAXBAUDRATE = 57600
     CrystalFrequency = 30000#khz == 30MHz
+    #CrystalFrequency = 12000#khz == 30MHz
+    #CrystalFrequency = 15000#khz == 30MHz
     PartIDs = (
         0x00008441,
         0x00008442,
