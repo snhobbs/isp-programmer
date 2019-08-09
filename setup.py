@@ -15,7 +15,7 @@ setup(name='ISPProgrammer',
         'numpy',
         'intelhex',
         'timeout_decorator',
-        'zlib'
+        #'zlib'
     ],
     test_suite='nose.collector',
     tests_require=['nose'],

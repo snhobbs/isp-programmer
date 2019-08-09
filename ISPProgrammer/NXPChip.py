@@ -73,7 +73,11 @@ class NXPChip(ISPChip):
         self.Wait()
         resp = self.ReadLine().strip().split('\n')
         assert(len(resp) == 1)
-        code = int(resp[0])
+        try:
+            code = int(resp[0])
+        except ValueError:
+            print("Response:", resp)
+            raise
         if(code != self.ReturnCodes["CMD_SUCCESS"]):
             print(resp)
             raise UserWarning("Return Code Failure in {} {}".format(CallLoc, self.GetErrorCodeName(code)))
