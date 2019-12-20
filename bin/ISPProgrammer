@@ -65,6 +65,7 @@ def MassErase(device, chipname):
 def WriteImage(device, chipname, imagein):
     chip = SetupChip(chipname, device)
     chip.WriteImage(imagein)
+    chip.Go(0, ThumbMode=False)
 
 @click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
 @click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
