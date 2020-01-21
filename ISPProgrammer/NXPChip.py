@@ -1,6 +1,8 @@
 from . import ISPChip
-from timeout_decorator import TimeoutError
+from time import sleep
+from timeout_decorator import TimeoutError, timeout
 import zlib
+import typing
 
 NXPReturnCodes = {
         "CMD_SUCCESS"                               : 0x0,
@@ -23,7 +25,7 @@ NXPReturnCodes = {
         "INVALID_BAUD_RATE"                         : 0x11,
         "INVALID_STOP_BIT"                          : 0x12,
         "CODE_READ_PROTECTION_ENABLED"              : 0x13,
-        "Unused 1"                                  : 0x14, 
+        "Unused 1"                                  : 0x14,
         "USER_CODE_CHECKSUM"                        : 0x15,
         "Unused 2"                                  : 0x16,
         "EFRO_NO_POWER"                             : 0x17,
@@ -35,178 +37,208 @@ NXPReturnCodes = {
         "NO_VALID_IMAGE"                            : 0x1d,
         "FAIM_NO_POWER"                             : 0x1e,
         "FAIM_NO_CLOCK"                             : 0x1f,
+        "NoStatusResponse"                          : 0xff,
     }
 
 class NXPChip(ISPChip):
-    PageSizeBytes = 64
+    kWordSize = 4
+    kPageSizeBytes = 64
     SectorSizePages = 16
     MaxByteTransfer = 1024
-    NewLine = "\r\n"
-    StatusRespLength = len(NewLine) + 1
+    StatusRespLength = len(ISPChip.kNewLine) + 1
     Parity = None
     DataBits = 8
     StopBits = 1
-    SyncString = "Synchronized\r\n"
-    SyncVerified = "OK\r\n"
-    ReturnCodes = NXPReturnCodes 
+    SyncString = "Synchronized"+ISPChip.kNewLine
+    SyncVerified = "OK"+ISPChip.kNewLine
+    ReturnCodes = NXPReturnCodes
     CRCLocation = 0x000002fc
 
     CRCValues = {
         "NO_ISP": 0x4e697370,
-        "CRP1" : 0x12345678,       
-        "CRP2" : 0x87654321,       
-        "CRP3" : 0x43218765,       
+        "CRP1" : 0x12345678,
+        "CRP2" : 0x87654321,
+        "CRP3" : 0x43218765,
     }
 
     @classmethod
-    def GetErrorCodeName(cls, code):
+    def GetErrorCodeName(cls, code : int) -> str:
         code = int(code)
         for item in cls.ReturnCodes.items():
             if code == item[1]:
                 return item[0]
         return "Not Found"
 
-    def GetReturnCode(self, CallLoc = ""):
+    def GetReturnCode(self) -> int:
+        for i in range(10):
+            #sleep(.1)
+            try:
+                resp = self.ReadLine().strip()
+                return int(resp)
+            except ValueError:
+                pass
+        return self.ReturnCodes["NoStatusResponse"]
+
+    def RaiseReturnCodeError(self, code : int, call_name : str) -> None:
+        if(int(code) != self.ReturnCodes["CMD_SUCCESS"]):
+            raise UserWarning("Return Code Failure in {} {} {}".format(call_name, self.GetErrorCodeName(code), code))
+
+    def AssertReturnCode(self, call_name : str) -> None:
         '''
         Get a return code with no response
         '''
-        self.Wait()
-        resp = self.ReadLine().strip().split('\n')
-        assert(len(resp) == 1)
-        try:
-            code = int(resp[0])
-        except ValueError:
-            print("Response:", resp)
-            raise
-        if(code != self.ReturnCodes["CMD_SUCCESS"]):
-            print(resp)
-            raise UserWarning("Return Code Failure in {} {}".format(CallLoc, self.GetErrorCodeName(code)))
+        code = self.GetReturnCode()
+        self.RaiseReturnCodeError(code, call_name)
 
-    def Write(self, string):
+    def Write(self, string) -> None:
         if type(string) != bytes:
             out = bytes(string, encoding = "utf-8")
         else:
             out = string
+        print(out)
         self.WriteSerial(out)
-        self.WriteSerial(bytes(self.NewLine, encoding = "utf-8"))
+        #self.WriteSerial(bytes(self.kNewLine, encoding = "utf-8"))
+
+    '''
+    Takes the command string, return the response code
+    '''
+    def WriteCommand(self, command_string) -> int:
+       self.Write(command_string)
+       self.Write(self.kNewLine)
+       return self.GetReturnCode()
 
     def Unlock(self):
         '''
         Enables Flash Write, Erase, & Go
         '''
-        #self.Wait()
         self.ClearBuffer()
-        self.Write("U 23130")
-        self.GetReturnCode("Unlock")
+        response_code = self.WriteCommand("U 23130")
+        self.RaiseReturnCodeError(response_code, "Unlock")
 
     def SetBaudRate(self, baudRate, stopBits = 1):
         '''
         Baud Depends of FAIM config, stopbit is 1 or 2
         '''
-        self.Write("B {} {}".format(baudRate, stopBits))
-        self.GetReturnCode("Set Baudrate")
+        response_code = self.WriteCommand("B {} {}".format(baudRate, stopBits))
+        self.RaiseReturnCodeError(response_code, "Set Baudrate")
 
-    def Echo(self, on=True):
+    def Echo(self, on : bool = True):
         '''
         ISP echos host when enabled
         '''
-        self.Write("A %d"%(on))
-        self.GetReturnCode("Set Echo")
+        if on:
+            command = "A 1"
+        else:
+            command = "A 0"
+        response_code = self.WriteCommand(command)
+        self.RaiseReturnCodeError(response_code, "Set Echo")
 
-    def WriteToRam(self, StartLoc, Data):
-        WordSize = 4
-        assert(len(Data)%WordSize == 0)
+    def WriteToRam(self, StartLoc : int , Data : bytes):
+        assert(len(Data)%self.kWordSize == 0)
         assert(StartLoc+len(Data) < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
-        
+
         print("Write to RAM %d bytes"%len(Data))
-        i = 0
         #while i < len(Data):
-        #    self.Write("W %d %d"%(StartLoc + i, WordSize))
-        #    self.GetReturnCode("Write to RAM")#get confirmation
-        #    self.Write(Data[i:i+WordSize])#Stream data after confirmation
-        #    i+=WordSize
-        
-        self.Write("W %d %d"%(StartLoc, len(Data)))
-        self.GetReturnCode("Write to RAM")#get confirmation
+        #    self.Write("W %d %d"%(StartLoc + i, kWordSize))
+        #    self.AssertReturnCode("Write to RAM")#get confirmation
+        #    self.Write(Data[i:i+kWordSize])#Stream data after confirmation
+        #    i+=kWordSize
+
+        #when transfer is complete the handler sends OK<CR><LF>
+        response_code = self.WriteCommand("W %d %d"%(StartLoc, len(Data)))
+        self.RaiseReturnCodeError(response_code, "Write to RAM")
         self.Write(Data)#Stream data after confirmation
+        #self.Write("OK"+self.kNewLine)
+        try:
+            print(self.ReadLine())
+        except TimeoutError:
+            return
 
-        self.Write("\r\n")
-        self.Read()
-        self.ClearBuffer()
-
-    def ReadMemory(self, StartLoc, NumBytes):
-        assert(NumBytes%4 == 0)
-        #assert(StartLoc+NumBytes < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
-        WordSize = 4
+    @timeout(4)
+    def ReadMemory(self, StartLoc : int, num_bytes : int):
+        assert(num_bytes%self.kWordSize == 0)
+        #assert(StartLoc+num_bytes < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
         print("ReadMemory")
-        
-        i = 0
-        out = []
-        self.Flush()
-        self.Read()
-        self.ClearBuffer()
-        self.Flush()
 
-        self.Write("R %d %d"%(StartLoc, NumBytes))
+        #self.Flush()
+        #self.Read()
+        #self.ClearBuffer()
+        #self.Flush()
 
-        while(len(self.DataBufferIn) < NumBytes + self.StatusRespLength):
+        print("R %d %d"%(StartLoc, num_bytes))
+        response_code = self.WriteCommand("R %d %d"%(StartLoc, num_bytes))
+        self.RaiseReturnCodeError(response_code, "Read Memory")
+
+        while(len(self.DataBufferIn) < (num_bytes)):
             self.Read()
-        #self.Wait()
-        self.GetReturnCode("Read Memory")
-        
+        # Command success is sent at the end of the transfe
+        # Command success is sent at the end of the transferr
         data = []
         while(len(self.DataBufferIn)):
             ch = self.DataBufferIn.popleft()
             data.append(ch)
 
-        assert(len(data) == NumBytes)
+        if(len(data) != num_bytes):
+            print(data, len(data), num_bytes)
+        assert(len(data) == num_bytes)
         return bytes(data)
 
-    def PrepSectorsForWrite(self, StartSector, EndSector):
-        self.Write("P %d %d"%(StartSector, EndSector))
-        self.GetReturnCode("Prep Sectors")
+    def PrepSectorsForWrite(self, StartSector : int, EndSector : int):
+        try:
+            response_code = self.WriteCommand("P %d %d"%(StartSector, EndSector))
+            self.RaiseReturnCodeError(response_code, "Prep Sectors")
+        except:
+            response_code = self.WriteCommand("P %d %d"%(StartSector, EndSector))
+            self.RaiseReturnCodeError(response_code, "Prep Sectors")
 
-    def CopyRAMToFlash(self, FlashAddress, RAMAddress, NumBytes):
-        assert(RAMAddress+NumBytes < self.RAMRange[1] and RAMAddress >= self.RAMRange[0])
-        assert(FlashAddress + NumBytes < self.FlashRange[1] and FlashAddress >= self.FlashRange[0])
+    def CopyRAMToFlash(self, FlashAddress : int, RAMAddress : int, num_bytes : int):
+        assert(RAMAddress+num_bytes < self.RAMRange[1] and RAMAddress >= self.RAMRange[0])
+        assert(FlashAddress + num_bytes < self.FlashRange[1] and FlashAddress >= self.FlashRange[0])
 
-        assert(FlashAddress%64 == 0)
-        assert(RAMAddress%4 == 0)
+        assert(FlashAddress%self.kPageSizeBytes == 0)
+        assert(RAMAddress%self.kWordSize == 0)
 
-        self.Write("C %d %d %d"%(FlashAddress, RAMAddress, NumBytes))
-        #self.Wait(2)
-        self.GetReturnCode("Copy RAM To Flash")
+        response_code = self.WriteCommand("C %d %d %d"%(FlashAddress, RAMAddress, num_bytes))
+        self.RaiseReturnCodeError(response_code, "Copy RAM To Flash")
+        #sleep(.2)
 
-    def Go(self, Address, ThumbMode = False):
+    def Go(self, Address : bool, ThumbMode : bool = False):
         '''
         Start executing code at the specified spot
         '''
         mode = ""
         if ThumbMode:
             mode = 'T'
-        self.Write("G %d %s"%(Address, mode))
-        self.GetReturnCode("Go")
+        response_code = self.WriteCommand("G %d %s"%(Address, mode))
+        self.RaiseReturnCodeError(response_code, "Go")
 
-    def EraseSector(self, StartSector, EndSector):
-        self.Write("E %d %d"%(StartSector, EndSector))
-        self.GetReturnCode("Erase Sectors")
+    def EraseSector(self, StartSector : int, EndSector : int):
+        response_code = self.WriteCommand("E %d %d"%(StartSector, EndSector))
+        self.RaiseReturnCodeError(response_code, "Erase Sectors")
 
-    def ErasePages(self, StartPage, ErasePage):
-        self.Write("X %d %d"%(StartPage, EndPage))
-        self.GetReturnCode("Erase Pages")
+    def ErasePages(self, StartPage : int, ErasePage : int):
+        response_code = self.WriteCommand("X %d %d"%(StartPage, EndPage))
+        self.RaiseReturnCodeError(response_code, "Erase Pages")
 
-    def BlankCheckSectors(self, StartSector, EndSector):
-        '''
-        Checks to see if the sector is blank
-        '''
-        self.Write("I %d %d"%(StartSector, EndSector))
-        self.GetReturnCode("Blank Check Sectors")
+    def CheckSectorsBlank(self, StartSector : int, EndSector : int) -> bool:
+        assert(StartSector <= EndSector)
+        response_code = self.WriteCommand("I %d %d"%(StartSector, EndSector) + self.kNewLine)
+        try:
+            self.ReadLine()
+            response = self.ReadLine().strip()
+            print("Check Sectors Blank response", response)
+        except TimeoutError:
+            pass
+        if response_code == NXPReturnCodes["CMD_SUCCESS"]:
+            return True
+        elif response_code == NXPReturnCodes["SECTOR_NOT_BLANK"]:
+            return False
+
+        self.RaiseReturnCodeError(response_code, "Blank Check Sectors")
 
     def ReadPartID(self):
-        self.Flush()
-        self.ClearBuffer()
-        self.Write("J")
-        self.GetReturnCode("Blank Check Sectors")
+        response_code = self.WriteCommand("J")
+        self.RaiseReturnCodeError(response_code, "Read Part ID")
         resp = self.ReadLine()
         return int(resp)
 
@@ -214,124 +246,169 @@ class NXPChip(ISPChip):
         '''
         LPC84x sends a 0x1a first for some reason. Also the boot version seems to be Minor then Major not like the docs say
         '''
-        self.Flush()
-
-        self.Write("K")
-        self.GetReturnCode("Read Bootcode Version")
+        response_code = self.WriteCommand("K")
+        self.RaiseReturnCodeError(response_code, "Read Bootcode Version")
         Minor = self.ReadLine().strip()
         Major = self.ReadLine().strip()
         return "%d.%d"%(int(Major), int(Minor))
 
-    def Compare(self, Address1, Address2, NumBytes):
-        '''
-        Returns if two sections are equal
-        '''
-        self.Write("M %d %d %d"%(Address1, Address2, NumBytes))
-        self.GetReturnCode("Compare")
+
+    '''
+    Checks to see if two sections in the memory map are equal
+    '''
+    def MemoryLocationsEqual(self, Address1 : int, Address2 : int, num_bytes : int):
+        self.Write("M %d %d %d"%(Address1, Address2, num_bytes) + self.kNewLine)
+        response = self.ReadLine()
+        response_code = int(response[0])
+        if response_code == NXPReturnCodes["CMD_SUCCESS"]:
+            return True
+        elif response_code == NXPReturnCodes["COMPARE_ERROR"]:
+            # offset of first mismatch
+            print("Memory locations not equal", bytes(response, encoding = "utf-8"))
+            return False
+        self.RaiseReturnCodeError(response_code, "Compare")
 
     def ReadUID(self):
-        self.ClearBuffer()
-        self.Write("N")
-        self.GetReturnCode("Read UID")
+        response_code = self.WriteCommand("N")
+        self.RaiseReturnCodeError(response_code, "Read UID")
         UID0 = self.ReadLine().strip()
         UID1 = self.ReadLine().strip()
         UID2 = self.ReadLine().strip()
         UID3 = self.ReadLine().strip()
-        return " ".join(["0x%08x"%int(uid) for uid in [UID0, UID1, UID2, UID3]]) 
+        return " ".join(["0x%08x"%int(uid) for uid in [UID0, UID1, UID2, UID3]])
 
-    def ReadCRC(self, Address, NumBytes):
-        self.ClearBuffer()
-        self.Write("S %d %d"%(Address, NumBytes))
-        self.GetReturnCode("Read CRC")
-        return self.ReadLine()
+    def ReadCRC(self, Address, num_bytes : int) -> int:
+        try:
+            response_code = self.WriteCommand("S %d %d"%(Address, num_bytes))
+        except TimeoutError:
+            response_code = self.WriteCommand("S %d %d"%(Address, num_bytes))
 
-    def ReadFlashSig(self, StartAddress, EndAddress, WaitStates = 2, Mode = 0):
+        self.RaiseReturnCodeError(response_code, "Read CRC")
+        return int(self.ReadLine().strip())
+
+    def ReadFlashSig(self, StartAddress : int, EndAddress : int, WaitStates : int = 2, Mode : int = 0):
         assert(StartAddress < EndAddress)
         assert(StartAddress >= self.FlashRange[0])
         assert(EndAddress <= self.FlashRange[1])
-        self.Write("Z %d %d %d %d"%(StartAddress, EndAddress, WaitStates, Mode))
-        self.GetReturnCode("Read Flash Sig")
+        response_code = self.WriteCommand("Z %d %d %d %d"%(StartAddress, EndAddress, WaitStates, Mode))
+        self.RaiseReturnCodeError(response_code, "Read Flash Signature")
         return self.ReadLine()
 
     def ReadWriteFAIM(self):
-        self.Write("O")
-        self.GetReturnCode("Read Write FAIM")
+        response_code = self.WriteCommand("O")
+        self.RaiseReturnCodeError(response_code, "Read Write FAIM")
+
+    def ResetSerialConnection(self):
+        self.Flush()
+        self.Write(self.kNewLine)
+        try:
+            pass
+            self.ReadLine()
+        except TimeoutError:
+            pass
 
     def InitConnection(self):
+        #self.ResetSerialConnection()
         try:
             try:
                 self.SyncConnection()
+                self.SetCrystalFrequency(self.CrystalFrequency)
             except (UserWarning, TimeoutError) as w:
                 print("Sync Failed", w)
-
-            print("Connect to running ISP")
-            self.ConnectToRunningISP()
-            print("Reconnection Successful")
-
+                print("Connect to running ISP")
+                self.ClearSerialConnection()
+            self.Echo(False)
+            try:
+                self.ReadLine()
+                self.Flush()
+                self.ClearBuffer()
+            except TimeoutError:
+                pass
             self.CheckPartType()
             uid = self.ReadUID()
             print("Part UID: %s"%uid)
             bootCodeVersion = self.ReadBootCodeVersion()
             print("Boot Code Version: %s"%bootCodeVersion)
             self.SetBaudRate(self.BaudRate)
-            print("Buadrate set to %d"%self.BaudRate)
-            #flashSig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
-            #print("Flash Signiture: %s"%flashSig)
+            print("Baudrate set to %d"%self.BaudRate)
         except Exception as e:
             print(e, type(e))
             raise
-        
-    def SyncConnection(self):
-        self.Write("?")
-        FrameIn = self.ReadLine()
 
-        if(FrameIn.strip() != self.SyncString.strip()):
+    def SyncConnection(self):
+        synced = False
+        self.ClearSerialConnection()
+        self.Flush()
+        for i in range(5):
+            self.Write('?'*15)
+            #self.Write('?' + self.kNewLine)
+            try:
+                FrameIn = self.ReadLine()
+                if(self.SyncString.strip() in FrameIn.strip()):
+                    synced = True
+                    break
+            except TimeoutError:
+                pass
+
+        if(not synced):
             #Check for SyncString
             raise UserWarning("Syncronization Failure")
 
-        self.Flush()
+        #self.Flush()
         self.Write(self.SyncString)#echo SyncString
-        FrameIn = self.ReadLine()#discard echo
-        self.ClearBuffer()
-        self.Flush()
-
-        self.Write("%d"%self.CrystalFrequency)
-        FrameIn = self.ReadLine()#Should be OK\r\n
-        if(FrameIn.strip() != self.SyncVerified.strip()):
-            raise UserWarning("Syncronization Verification Failure")
-
-        self.Echo(False)
         try:
-            self.Echo(False)
-        except ValueError:
-            pass
-        print("Syncronization Successful")
-
-    def ConnectToRunningISP(self):
-        self.Wait()
-        self.Flush()
-        self.ClearBuffer()
-        try:
-            self.ReadLine()
+            FrameIn = self.ReadLine()#discard echo
         except TimeoutError:
             pass
-        try:
-            self.Write(self.NewLine)
-            self.Read()
-            self.ClearBuffer()
-            self.Echo(False)
-        except ValueError:
-            self.Flush()
-            self.Read()
-            self.ClearBuffer()
+
+        verified = False
+        for i in range(3):
+            try:
+                FrameIn = self.ReadLine()#Should be OK\r\n
+                if(self.SyncVerified.strip() in FrameIn):
+                    verified = True
+                    break
+            except TimeoutError:
+                pass
+        if not verified:
+            raise UserWarning("Verification Failure")
+        print("Syncronization Successful")
+
+    def ClearSerialConnection(self):
+        self.Write(self.kNewLine)
+        self.ClearBuffer()
+        self.Flush()
+        self.Read()
+        self.ClearBuffer()
+        self.Flush()
+        for i in range(2):
+            try:
+                self.ReadLine()
+            except TimeoutError:
+                pass
+
+    def SetCrystalFrequency(self, frequency_khz : int):
+        self.Write("%d"%frequency_khz + self.kNewLine)
+        verified = False
+        for i in range(3):
+            try:
+                FrameIn = self.ReadLine()#Should be OK\r\n
+                if(self.SyncVerified.strip() in FrameIn):
+                    verified = True
+                    break
+            except TimeoutError:
+                pass
+        if not verified:
+            raise UserWarning("Verification Failure")
+
 
     def CheckPartType(self):
         PartID = self.ReadPartID()
         if(PartID not in self.PartIDs):
             raise UserWarning("%s recieved 0x%08x"%(self.ChipName, PartID))
-        
         print("Part Check Successful, 0x%08x"%(PartID))
-    def CheckFlashWrite(Data, FlashAddress):
+
+    def CheckFlashWrite(Data, FlashAddress : int):
         '''
         Read Memory and compare it to what was written
         '''
@@ -342,94 +419,149 @@ class NXPChip(ISPChip):
         assert(type(Data) == type(DataRead))
         if(Data != DataRead):
             return False
-        else:
-            return True
+        return True
 
-
-    def WriteFlashSector(self, sector, Data):
+    def WriteFlashSector(self, sector : int, Data : bytes):
         RAMAddress = self.RAMStartWrite
-        sectorSizeBytes = self.PageSizeBytes*self.SectorSizePages
+        sectorSizeBytes = self.kPageSizeBytes*self.SectorSizePages
         FlashAddress = self.FlashRange[0] + sector*sectorSizeBytes
-        print("Writing Sector: %d\nFlash Address: %d\nRAM Address: %d\n"%(sector, FlashAddress, RAMAddress))
+        print("Writing Sector: %d\nFlash Address: %x\nRAM Address: %x\n"%(sector, FlashAddress, RAMAddress))
 
-        self.BlankCheckSectors(sector, sector)
-        Data += bytes(sectorSizeBytes - len(Data))
+        assert(len(Data) == sectorSizeBytes)
+        #Data += bytes(sectorSizeBytes - len(Data))
 
-        self.WriteToRam(RAMAddress, Data)
-
+        data_crc = zlib.crc32(Data, 0)
+        sleep(.1)
+        try:
+            ram_crc = self.ReadCRC(RAMAddress, num_bytes = len(Data))
+        except:
+            ram_crc = self.ReadCRC(RAMAddress, num_bytes = len(Data))
+        while(ram_crc != data_crc):
+            sleep(.1)
+            self.WriteToRam(RAMAddress, Data)
+            sleep(.1)
+            ram_crc = self.ReadCRC(RAMAddress, num_bytes = len(Data))
+            if(data_crc != ram_crc):
+                print("CRC Check failed", data_crc, ram_crc)
+        assert(data_crc == ram_crc)
 
         print("Prep Sector")
+        assert(self.CheckSectorsBlank(sector, sector))
+        sleep(.1)
         self.PrepSectorsForWrite(sector, sector)
+        sleep(.1)
         print("Write to Flash")
         self.CopyRAMToFlash(FlashAddress, RAMAddress, sectorSizeBytes)
-        self.Compare(FlashAddress, RAMAddress, sectorSizeBytes)
-        print("Compare Sucessful")
+        sleep(.1)
+        flash_crc = self.ReadCRC(FlashAddress, num_bytes = len(Data))
+        assert(flash_crc == data_crc)
+        assert(self.MemoryLocationsEqual(FlashAddress, RAMAddress, sectorSizeBytes))
 
-        #if(not CheckFlashWrite(Data, FlashAddress)):
-        #    raise UserWarning("Flash Read Check Failed")
-        #print("Flash Read Successful")
-
-
-        crcCalc = zlib.crc32(Data)
-        crcChip = self.ReadCRC(FlashAddress, NumBytes = len(Data))
-        if(crcCalc != int(crcChip)):
-            raise UserWarning("CRC Check Failed for sector %d".format(sector))
-        else:
-            print("CRC Check Passed")
-
-    def WriteImage(self, ImageFile):
+    def WriteImage(self, ImageFile : str):
         self.Unlock()
         sector = 0
         writeCount = 0
 
-        SectorBytes = self.SectorSizePages*self.PageSizeBytes
-        assert(SectorBytes%4 == 0)
-        
+        SectorBytes = self.SectorSizePages*self.kPageSizeBytes
+        assert(SectorBytes%self.kWordSize == 0)
+
         with open(ImageFile, 'rb') as f:
             prog = f.read()
-            print("Program Length: ", len(prog))
+            image = MakeBootable(self.kCheckSumLocation, prog)
+            print("Program Length:", len(prog))
             while(True):
-                print("Sector ", sector)
-                DataChunk = prog[writeCount : writeCount + SectorBytes]
+                print("Sector", sector)
+                DataChunk = image[writeCount : writeCount + SectorBytes]
                 if(not len(DataChunk)):
                     break
+                elif(len(DataChunk) != SectorBytes):
+                    DataChunk += bytes([0xff] *(SectorBytes - len(DataChunk)))
                 assert(sector < self.SectorCount)
                 self.PrepSectorsForWrite(sector, sector)
+                sleep(.1)
                 self.EraseSector(sector, sector)
-                self.BlankCheckSectors(sector, sector)
+                sleep(.1)
+                assert(self.CheckSectorsBlank(sector, sector))
+                sleep(.1)
 
                 print("Write Flash")
+                self.PrepSectorsForWrite(sector, sector)
+                sleep(.1)
                 self.WriteFlashSector(sector, DataChunk)
+                sleep(.1)
+                #assert(self.ReadSector(sector) == DataChunk)
                 print("Flash Written")
 
                 writeCount += SectorBytes
                 sector += 1
+            #write the cpu exception vector
 
+        chip_flash_sig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
+        print("Flash Signature: %s"%chip_flash_sig)
         print("Programming Complete.")
 
-    def ReadImage(self, ImageFile):
-        sector = 0
-        writeCount = 0
-        SectorBytes = self.SectorSizePages*self.PageSizeBytes
-        assert(SectorBytes%4 == 0)
-        
+    def FindFirstBlankSector(self) -> int:
+        for sector in range(self.SectorCount):
+            if self.CheckSectorsBlank(sector, self.SectorCount - 1):
+                return sector
+        return self.SectorCount - 1
+
+    def ReadSector(self, sector : int) -> bytes:
+        SectorBytes = self.SectorSizePages*self.kPageSizeBytes
+        assert(SectorBytes%self.kWordSize == 0)
+        return self.ReadMemory(sector*SectorBytes, SectorBytes)
+
+    def ReadImage(self, ImageFile : str):
+        blank_sector = self.FindFirstBlankSector()
         with open(ImageFile, 'wb') as f:
-            for sector in range(self.SectorCount):
+            for sector in range(blank_sector):
                 print("Sector ", sector)
-                try:
-                    self.BlankCheckSectors(sector, sector)
-                except UserWarning:
-                    break
-                
-                DataChunk = self.ReadMemory(sector, SectorBytes)
-                f.write(DataChunk)
+                f.write(self.ReadSector(sector))
 
     def MassErase(self):
-        self.Wait()
+        kSectorEnd = self.SectorCount - 1
+        sleep(1)
         self.ClearBuffer()
         self.Unlock()
-        self.PrepSectorsForWrite(0, self.SectorCount - 1)
-        self.EraseSector(0, self.SectorCount - 1)
+        self.PrepSectorsForWrite(0, kSectorEnd)
+        self.EraseSector(0, kSectorEnd)
         print("Checking Sectors are blank")
-        self.BlankCheckSectors(0, self.SectorCount -1)
+        assert(self.CheckSectorsBlank(0, kSectorEnd))
+
+def MakeBootable(vector_table_loc, orig_image):
+    #Calculate 2's compliment of the checksum
+    #of table entries 0 to 6
+    import struct
+    u32_mod = (1<<32)
+    # make this a valid image by inserting a checksum in the correct place
+
+    #kTableEntriesChecked = 6
+    #table = image[vector_table_loc - kTableEntriesChecked : vector_table_loc]
+    # <8I is littl endian, 8 bits, as 32 bit integers
+    intvecs = struct.unpack("<8I", orig_image[0:32])
+    # default vector is 5: 0x14, new cortex cpus use 7: 0x1c
+    valid_image_csum_vec = 7
+    # calculate the checksum over the interrupt vectors
+    csum = 0
+    intvecs_list = []
+    for vec in range(0, len(intvecs)):
+        intvecs_list.append(intvecs[vec])
+        if valid_image_csum_vec == 5 or vec <= valid_image_csum_vec:
+            csum = csum + intvecs[vec]
+    # remove the value at the checksum location
+    csum -= intvecs[valid_image_csum_vec]
+    csum %= u32_mod
+    csum = u32_mod - csum
+
+    print("Inserting intvec checksum 0x%08x in image at offset %d" %
+            (csum, valid_image_csum_vec))
+
+    intvecs_list[valid_image_csum_vec] = csum
+
+    image = b''
+    for vecval in intvecs_list:
+        image += struct.pack("<I", vecval)
+
+    image += orig_image[32:]
+    return image
 

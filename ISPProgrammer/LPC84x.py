@@ -6,10 +6,10 @@ class LPC84x(NXPChip):
         'LPC845',
         'LPC844',
     )
-    MAXBAUDRATE = 115200
+    #MAXBAUDRATE = 115200
 
     #MAXBAUDRATE = 230400
-    #MAXBAUDRATE = 9600
+    MAXBAUDRATE = 9600
 
     #MAXBAUDRATE = 57600
     #CrystalFrequency = 30000#khz == 30MHz
@@ -21,15 +21,17 @@ class LPC84x(NXPChip):
         0x00008444,
         0x00008451,
         0x00008452,
-        0x00008454,
+        0x00008453,
         0x00008454,
     )
 
     SectorCount = 64
     RAMSize = 16*KILOBYTE
     RAMRange = (0x10000000, 0x10004000)
-    FlashRange = (0x0, SectorCount*NXPChip.PageSizeBytes*NXPChip.SectorSizePages-1)
+    FlashRange = (0x0, SectorCount*NXPChip.kPageSizeBytes*NXPChip.SectorSizePages-1)
     RAMStartWrite = 0x10000800#the ISP stack starts
+    kCheckSumLocation = 7 #0x0000001c
+
     #StartExecution = 0x0F000000
 
     assert(FlashRange[1] == 0x00010000-1)
