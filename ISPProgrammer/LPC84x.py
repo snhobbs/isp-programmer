@@ -6,10 +6,10 @@ class LPC84x(NXPChip):
         'LPC845',
         'LPC844',
     )
-    MAXBAUDRATE = 115200
+    #MAXBAUDRATE = 115200
 
     #MAXBAUDRATE = 230400
-    #MAXBAUDRATE = 9600
+    MAXBAUDRATE = 9600
 
     #MAXBAUDRATE = 57600
     #CrystalFrequency = 30000#khz == 30MHz

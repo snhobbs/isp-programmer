@@ -23,7 +23,7 @@ NXPReturnCodes = {
         "INVALID_BAUD_RATE"                         : 0x11,
         "INVALID_STOP_BIT"                          : 0x12,
         "CODE_READ_PROTECTION_ENABLED"              : 0x13,
-        "Unused 1"                                  : 0x14, 
+        "Unused 1"                                  : 0x14,
         "USER_CODE_CHECKSUM"                        : 0x15,
         "Unused 2"                                  : 0x16,
         "EFRO_NO_POWER"                             : 0x17,
@@ -46,16 +46,16 @@ class NXPChip(ISPChip):
     Parity = None
     DataBits = 8
     StopBits = 1
-    SyncString = "Synchronized\r\n"
-    SyncVerified = "OK\r\n"
-    ReturnCodes = NXPReturnCodes 
+    SyncString = "Synchronized"+NewLine
+    SyncVerified = "OK"+NewLine
+    ReturnCodes = NXPReturnCodes
     CRCLocation = 0x000002fc
 
     CRCValues = {
         "NO_ISP": 0x4e697370,
-        "CRP1" : 0x12345678,       
-        "CRP2" : 0x87654321,       
-        "CRP3" : 0x43218765,       
+        "CRP1" : 0x12345678,
+        "CRP2" : 0x87654321,
+        "CRP3" : 0x43218765,
     }
 
     @classmethod
@@ -117,7 +117,7 @@ class NXPChip(ISPChip):
         WordSize = 4
         assert(len(Data)%WordSize == 0)
         assert(StartLoc+len(Data) < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
-        
+
         print("Write to RAM %d bytes"%len(Data))
         i = 0
         #while i < len(Data):
@@ -125,7 +125,7 @@ class NXPChip(ISPChip):
         #    self.GetReturnCode("Write to RAM")#get confirmation
         #    self.Write(Data[i:i+WordSize])#Stream data after confirmation
         #    i+=WordSize
-        
+
         self.Write("W %d %d"%(StartLoc, len(Data)))
         self.GetReturnCode("Write to RAM")#get confirmation
         self.Write(Data)#Stream data after confirmation
@@ -139,7 +139,7 @@ class NXPChip(ISPChip):
         #assert(StartLoc+NumBytes < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
         WordSize = 4
         print("ReadMemory")
-        
+
         i = 0
         out = []
         self.Flush()
@@ -153,7 +153,7 @@ class NXPChip(ISPChip):
             self.Read()
         #self.Wait()
         self.GetReturnCode("Read Memory")
-        
+
         data = []
         while(len(self.DataBufferIn)):
             ch = self.DataBufferIn.popleft()
@@ -185,7 +185,12 @@ class NXPChip(ISPChip):
         if ThumbMode:
             mode = 'T'
         self.Write("G %d %s"%(Address, mode))
-        self.GetReturnCode("Go")
+        while(True):
+            try:
+                self.GetReturnCode("Go")
+            except TimeoutError:
+                pass
+            break
 
     def EraseSector(self, StartSector, EndSector):
         self.Write("E %d %d"%(StartSector, EndSector))
@@ -237,7 +242,7 @@ class NXPChip(ISPChip):
         UID1 = self.ReadLine().strip()
         UID2 = self.ReadLine().strip()
         UID3 = self.ReadLine().strip()
-        return " ".join(["0x%08x"%int(uid) for uid in [UID0, UID1, UID2, UID3]]) 
+        return " ".join(["0x%08x"%int(uid) for uid in [UID0, UID1, UID2, UID3]])
 
     def ReadCRC(self, Address, NumBytes):
         self.ClearBuffer()
@@ -280,7 +285,7 @@ class NXPChip(ISPChip):
         except Exception as e:
             print(e, type(e))
             raise
-        
+
     def SyncConnection(self):
         self.Write("?")
         FrameIn = self.ReadLine()
@@ -329,7 +334,7 @@ class NXPChip(ISPChip):
         PartID = self.ReadPartID()
         if(PartID not in self.PartIDs):
             raise UserWarning("%s recieved 0x%08x"%(self.ChipName, PartID))
-        
+
         print("Part Check Successful, 0x%08x"%(PartID))
     def CheckFlashWrite(Data, FlashAddress):
         '''
@@ -384,7 +389,7 @@ class NXPChip(ISPChip):
 
         SectorBytes = self.SectorSizePages*self.PageSizeBytes
         assert(SectorBytes%4 == 0)
-        
+
         with open(ImageFile, 'rb') as f:
             prog = f.read()
             print("Program Length: ", len(prog))
@@ -412,7 +417,7 @@ class NXPChip(ISPChip):
         writeCount = 0
         SectorBytes = self.SectorSizePages*self.PageSizeBytes
         assert(SectorBytes%4 == 0)
-        
+
         with open(ImageFile, 'wb') as f:
             for sector in range(self.SectorCount):
                 print("Sector ", sector)
@@ -420,7 +425,7 @@ class NXPChip(ISPChip):
                     self.BlankCheckSectors(sector, sector)
                 except UserWarning:
                     break
-                
+
                 DataChunk = self.ReadMemory(sector, SectorBytes)
                 f.write(DataChunk)
 
