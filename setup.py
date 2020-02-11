@@ -2,7 +2,7 @@
 from setuptools import setup, find_packages
 
 setup(name='ISPProgrammer',
-    version='0.0.0',
+    version='0.0.2',
     description='',
     url='',
     author='ElectroOptical Innovations, LLC.',

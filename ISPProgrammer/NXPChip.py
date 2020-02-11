@@ -75,12 +75,11 @@ class NXPChip(ISPChip):
             try:
                 resp = self.ReadLine().strip()
                 code = int(resp)
-                break
+                if(code != self.ReturnCodes["CMD_SUCCESS"]):
+                    raise UserWarning("Return Code Failure in {} {} {}".format(CallLoc, self.GetErrorCodeName(code), code))
+                return
             except ValueError:
                 pass
-        if(code != self.ReturnCodes["CMD_SUCCESS"]):
-            print(resp)
-            raise UserWarning("Return Code Failure in {} {} {}".format(CallLoc, self.GetErrorCodeName(code), code))
 
     def Write(self, string):
         if type(string) != bytes:
@@ -114,7 +113,13 @@ class NXPChip(ISPChip):
             self.Write("A 1")
         else:
             self.Write("A 0")
-        self.GetReturnCode("Set Echo")
+        try:
+            self.GetReturnCode("Set Echo")
+        except UserWarning as e:
+            try:
+                self.GetReturnCode("Set Echo")
+            except TimeoutError:
+                raise e
 
     def WriteToRam(self, StartLoc, Data):
         WordSize = 4
@@ -133,7 +138,7 @@ class NXPChip(ISPChip):
         self.GetReturnCode("Write to RAM")#get confirmation
         self.Write(Data)#Stream data after confirmation
 
-        self.Write("\r\n")
+        self.Write(self.NewLine)
         self.Read()
         self.ClearBuffer()
 
@@ -265,16 +270,26 @@ class NXPChip(ISPChip):
         self.Write("O")
         self.GetReturnCode("Read Write FAIM")
 
+    def ResetSerialConnection(self):
+        self.Flush()
+        self.Write(self.NewLine)
+        try:
+            pass
+            self.ReadLine()
+        except TimeoutError:
+            pass
+
     def InitConnection(self):
+        #self.ResetSerialConnection()
         try:
             try:
                 self.SyncConnection()
+                self.SetCrystalFrequency(self.CrystalFrequency)
             except (UserWarning, TimeoutError) as w:
                 print("Sync Failed", w)
-
-            print("Connect to running ISP")
-            self.ConnectToRunningISP()
-            print("Reconnection Successful")
+                print("Connect to running ISP")
+                self.ConnectToRunningISP()
+                print("Reconnection Successful")
 
             self.CheckPartType()
             uid = self.ReadUID()
@@ -290,70 +305,81 @@ class NXPChip(ISPChip):
             raise
 
     def SyncConnection(self):
+        synced = False
+        self.ClearSerialConnection()
         self.Flush()
-        self.Write("?")
-        self.Write("?")
-        FrameIn = self.ReadLine()
+        for i in range(5):
+            self.Write('?'*15)
+            #self.Write('?' + self.NewLine)
+            try:
+                FrameIn = self.ReadLine()
+                if(self.SyncString.strip() in FrameIn.strip()):
+                    synced = True
+                    break
+            except TimeoutError:
+                pass
 
-        if(FrameIn.strip() != self.SyncString.strip()):
+        if(not synced):
             #Check for SyncString
             raise UserWarning("Syncronization Failure")
 
-        self.Flush()
+        #self.Flush()
         self.Write(self.SyncString)#echo SyncString
-        FrameIn = self.ReadLine()#discard echo
-        self.ClearBuffer()
-        self.Flush()
-
-        self.Wait()
-        self.Write("%d"%self.CrystalFrequency)
-        verified = False
-        for i in range(10):
-            self.Wait()
-            FrameIn = self.ReadLine()#Should be OK\r\n
-            if(FrameIn.strip() == self.SyncVerified.strip()):
-                verified = True
-                break
-        if not verified:
-            raise UserWarning("Syncronization Verification Failure")
-
-        while True:
-            try:
-                self.ReadLine()
-            except TimeoutError:
-                break
-        self.Echo(False)
-        while True:
-            try:
-                self.ReadLine()
-            except TimeoutError:
-                break
-        print("Syncronization Successful")
-
-    def ConnectToRunningISP(self):
-        self.Wait()
-        self.Flush()
-        self.ClearBuffer()
         try:
-            self.ReadLine()
+            FrameIn = self.ReadLine()#discard echo
         except TimeoutError:
             pass
-        try:
-            self.Write(self.NewLine)
-            self.Read()
-            self.ClearBuffer()
-            self.Echo(False)
-        except ValueError:
-            self.Flush()
-            self.Read()
-            self.ClearBuffer()
+
+        verified = False
+        for i in range(3):
+            try:
+                FrameIn = self.ReadLine()#Should be OK\r\n
+                if(self.SyncVerified.strip() in FrameIn):
+                    verified = True
+                    break
+            except TimeoutError:
+                pass
+        if not verified:
+            raise UserWarning("Verification Failure")
+        print("Syncronization Successful")
+
+    def ClearSerialConnection(self):
+        self.Write("")
+        self.ClearBuffer()
+        self.Flush()
+        self.Read()
+        self.ClearBuffer()
+        self.Flush()
+        for i in range(2):
+            try:
+                self.ReadLine()
+            except TimeoutError:
+                pass
+
+    def SetCrystalFrequency(self, frequency_khz):
+        self.Write("%d"%frequency_khz)
+        verified = False
+        for i in range(3):
+            try:
+                FrameIn = self.ReadLine()#Should be OK\r\n
+                if(self.SyncVerified.strip() in FrameIn):
+                    verified = True
+                    break
+            except TimeoutError:
+                pass
+        if not verified:
+            raise UserWarning("Verification Failure")
+
+    def ConnectToRunningISP(self):
+        self.ClearSerialConnection()
+        self.Echo(False)
 
     def CheckPartType(self):
         PartID = self.ReadPartID()
         if(PartID not in self.PartIDs):
             raise UserWarning("%s recieved 0x%08x"%(self.ChipName, PartID))
-
         print("Part Check Successful, 0x%08x"%(PartID))
+
     def CheckFlashWrite(Data, FlashAddress):
         '''
         Read Memory and compare it to what was written
