@@ -52,7 +52,7 @@ class ISPChip(object):
 
     def ReadFrame(self):
         '''
-        Fill the recieving buffer until 
+        Fill the recieving buffer until
         '''
         fNewFrame = False
 
@@ -65,7 +65,7 @@ class ISPChip(object):
                 fNewFrame = True
                 break
         return fNewFrame
-         
+
     def Check(self, *args, **kwargs):
         raise NotImplementedError
 

@@ -70,17 +70,17 @@ class NXPChip(ISPChip):
         '''
         Get a return code with no response
         '''
-        self.Wait()
-        resp = self.ReadLine().strip().split('\n')
-        assert(len(resp) == 1)
-        try:
-            code = int(resp[0])
-        except ValueError:
-            print("Response:", resp)
-            raise
+        for i in range(10):
+            self.Wait()
+            try:
+                resp = self.ReadLine().strip()
+                code = int(resp)
+                break
+            except ValueError:
+                pass
         if(code != self.ReturnCodes["CMD_SUCCESS"]):
             print(resp)
-            raise UserWarning("Return Code Failure in {} {}".format(CallLoc, self.GetErrorCodeName(code)))
+            raise UserWarning("Return Code Failure in {} {} {}".format(CallLoc, self.GetErrorCodeName(code), code))
 
     def Write(self, string):
         if type(string) != bytes:
@@ -110,7 +110,10 @@ class NXPChip(ISPChip):
         '''
         ISP echos host when enabled
         '''
-        self.Write("A %d"%(on))
+        if on:
+            self.Write("A 1")
+        else:
+            self.Write("A 0")
         self.GetReturnCode("Set Echo")
 
     def WriteToRam(self, StartLoc, Data):
@@ -279,7 +282,7 @@ class NXPChip(ISPChip):
             bootCodeVersion = self.ReadBootCodeVersion()
             print("Boot Code Version: %s"%bootCodeVersion)
             self.SetBaudRate(self.BaudRate)
-            print("Buadrate set to %d"%self.BaudRate)
+            print("Baudrate set to %d"%self.BaudRate)
             #flashSig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
             #print("Flash Signiture: %s"%flashSig)
         except Exception as e:
@@ -287,6 +290,8 @@ class NXPChip(ISPChip):
             raise
 
     def SyncConnection(self):
+        self.Flush()
+        self.Write("?")
         self.Write("?")
         FrameIn = self.ReadLine()
 
@@ -300,16 +305,29 @@ class NXPChip(ISPChip):
         self.ClearBuffer()
         self.Flush()
 
+        self.Wait()
         self.Write("%d"%self.CrystalFrequency)
-        FrameIn = self.ReadLine()#Should be OK\r\n
-        if(FrameIn.strip() != self.SyncVerified.strip()):
+        verified = False
+        for i in range(10):
+            self.Wait()
+            FrameIn = self.ReadLine()#Should be OK\r\n
+            if(FrameIn.strip() == self.SyncVerified.strip()):
+                verified = True
+                break
+        if not verified:
             raise UserWarning("Syncronization Verification Failure")
 
+        while True:
+            try:
+                self.ReadLine()
+            except TimeoutError:
+                break
         self.Echo(False)
-        try:
-            self.Echo(False)
-        except ValueError:
-            pass
+        while True:
+            try:
+                self.ReadLine()
+            except TimeoutError:
+                break
         print("Syncronization Successful")
 
     def ConnectToRunningISP(self):
