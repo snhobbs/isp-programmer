@@ -28,7 +28,7 @@ class LPC84x(NXPChip):
     SectorCount = 64
     RAMSize = 16*KILOBYTE
     RAMRange = (0x10000000, 0x10004000)
-    FlashRange = (0x0, SectorCount*NXPChip.PageSizeBytes*NXPChip.SectorSizePages-1)
+    FlashRange = (0x0, SectorCount*NXPChip.kPageSizeBytes*NXPChip.SectorSizePages-1)
     RAMStartWrite = 0x10000800#the ISP stack starts
     #StartExecution = 0x0F000000
 
