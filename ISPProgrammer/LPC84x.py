@@ -30,6 +30,8 @@ class LPC84x(NXPChip):
     RAMRange = (0x10000000, 0x10004000)
     FlashRange = (0x0, SectorCount*NXPChip.kPageSizeBytes*NXPChip.SectorSizePages-1)
     RAMStartWrite = 0x10000800#the ISP stack starts
+    kCheckSumLocation = 7 #0x0000001c
+
     #StartExecution = 0x0F000000
 
     assert(FlashRange[1] == 0x00010000-1)

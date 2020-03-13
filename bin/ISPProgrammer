@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from ISPProgrammer import LPC80x, LPC84x, LPC175_6x
+from ISPProgrammer import LPC80x, LPC84x, LPC175_6x, MockUart, UartDevice
 import click
 
 INSTALLED_FAMILIES = (
@@ -31,9 +31,10 @@ def SetupChip(chipname, device = "/dev/ttyUSB0"):
     chip = None
     for ChipFamily in INSTALLED_FAMILIES:
         if chipname in ChipFamily.Family:
-            chip = ChipFamily(device, baudrate = ChipFamily.MAXBAUDRATE) 
+            #iodevice = MockUart(device, baudrate = ChipFamily.MAXBAUDRATE)
+            iodevice = UartDevice(device, baudrate = ChipFamily.MAXBAUDRATE)
+            chip = ChipFamily(iodevice)
             break
-    
     if(chip is None):
         raise UserWarning("Chip %s unknown"%chipname)
 
@@ -66,6 +67,7 @@ def WriteImage(device, chipname, imagein):
     chip = SetupChip(chipname, device)
     chip.WriteImage(imagein)
     #chip.Go(0, ThumbMode=False)
+    chip.Go(0, ThumbMode=True)
 
 @click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
 @click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')

@@ -1,35 +1,67 @@
 from serial import Serial
 from collections import deque
+import typing
 from timeout_decorator import timeout
 from time import sleep
 
-class ISPChip(object):
-    NewLine = "\r\n"
-    def __init__(self, port = "/dev/ttyUSB0", baudrate = 9600):
+class IODevice(object):
+    pass
+
+class MockUart(object):
+    def __init__(self, port : str = "/dev/ttyUSB0", baudrate : int = 9600):
+        self.baudrate = baudrate
+        self.port = port
+    def ReadByte(self):
+        return 0x00
+    def ReadAll(self):
+        return bytes(0x00)
+    def Write(self, arr : bytes):
+        pass
+    def Flush(self):
+        pass
+    def SetBaudrate(self, baudrate : int) -> None:
+        self.baudrate = baudrate
+    def GetBaudrate(self):
+        return self.baudrate
+
+class UartDevice(IODevice):
+    def __init__(self, port : str = "/dev/ttyUSB0", baudrate: int = 9600):
         self.uart = Serial(port, baudrate, xonxoff = False)
+    def ReadByte(self):
+        return self.uart.read_all()
+    def ReadAll(self):
+        return self.uart.read_all()
+    def Write(self, arr : bytes):
+        self.uart.write(arr)
+    def Flush(self):
+        self.uart.flush()
+    def SetBaudrate(self, baudrate : int) -> None:
+        self.uart.baudrate = baudrate
+    def GetBaudrate(self):
+        return self.uart.baudrate
+
+class ISPChip(object):
+    kNewLine = "\r\n"
+    def __init__(self, iodevice : IODevice):
+        self.iodevice = iodevice
         self.frame = []
         self.DataBufferIn = deque()
 
     @property
     def BaudRate(self):
-        return self.uart.baudrate
+        return self.iodevice.GetBaudrate()
 
-    def ChangeBaudRate(self, baudrate):
+    def ChangeBaudRate(self, baudrate : int):
         self.SetBaudRate(baudrate)
-        self.uart.baudrate = baudrate
+        self.iodevice.SetBaudrate(baudrate)
 
-    def WriteSerial(self, out):
-        assert(type(out) == bytes)
-        self.uart.write(out)
-
-    def Wait(self, time = 0.004):
-        sleep(time)
+    def WriteSerial(self, out : bytes) -> None:
+        self.iodevice.Write(out)
 
     def Flush(self):
-        self.uart.flush()
+        self.iodevice.Flush()
 
-    #@timeout(0.25)
-    @timeout(1)
+    @timeout(0.25)
     def ReadLine(self):
         while(not self.ReadFrame()):
             self.Read()
@@ -48,7 +80,7 @@ class ISPChip(object):
         self.frame.clear()
 
     def Read(self):
-        self.DataBufferIn.extend(self.uart.read_all())
+        self.DataBufferIn.extend(self.iodevice.ReadAll())
 
     def ReadFrame(self):
         '''
@@ -60,7 +92,7 @@ class ISPChip(object):
             ch = self.DataBufferIn.popleft()
             #print(hex(ch), chr(ch))
             self.frame.append(ch)
-            if(chr(ch) == self.NewLine[-1]):
+            if(chr(ch) == self.kNewLine[-1]):
                 #print("New Frame")
                 fNewFrame = True
                 break
@@ -71,3 +103,4 @@ class ISPChip(object):
 
     def InitConnection(self, *args, **kwargs):
         raise NotImplementedError
+
