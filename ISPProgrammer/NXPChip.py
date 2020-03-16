@@ -95,7 +95,7 @@ class NXPChip(ISPChip):
             out = bytes(string, encoding = "utf-8")
         else:
             out = string
-        print(out)
+        #print(out)
         self.WriteSerial(out)
         #self.WriteSerial(bytes(self.kNewLine, encoding = "utf-8"))
 
