@@ -1,8 +1,10 @@
 from . import ISPChip
 from time import sleep
 from timeout_decorator import TimeoutError, timeout
-import zlib
+import zlib, math
 import typing
+import struct
+from pycrc.algorithms import Crc
 
 NXPReturnCodes = {
         "CMD_SUCCESS"                               : 0x0,
@@ -457,44 +459,48 @@ class NXPChip(ISPChip):
         assert(flash_crc == data_crc)
         assert(self.MemoryLocationsEqual(FlashAddress, RAMAddress, sectorSizeBytes))
 
+    def FillDataToFitSector(self, data):
+        SectorBytes = self.SectorSizePages*self.kPageSizeBytes
+        if (len(data) != SectorBytes):
+            data += bytes([0xff] *(SectorBytes - len(data)))
+        return data
+
+    def WriteSector(self, sector, data):
+        assert(len(data))
+        filled_data = self.FillDataToFitSector(data)
+        self.PrepSectorsForWrite(sector, sector)
+        sleep(.1)
+        self.EraseSector(sector, sector)
+        sleep(.1)
+        assert(self.CheckSectorsBlank(sector, sector))
+        sleep(.1)
+
+        self.PrepSectorsForWrite(sector, sector)
+        sleep(.1)
+        self.WriteFlashSector(sector, filled_data)
+        sleep(.1)
+        #assert(self.ReadSector(sector) == DataChunk)
+
     def WriteImage(self, ImageFile : str):
         self.Unlock()
-        sector = 0
-        writeCount = 0
-
         SectorBytes = self.SectorSizePages*self.kPageSizeBytes
         assert(SectorBytes%self.kWordSize == 0)
 
+        #make not bootable
+        self.WriteSector(0, bytes([0xde]*SectorBytes))
+
         with open(ImageFile, 'rb') as f:
             prog = f.read()
+            #image = RemoveBootableCheckSum(self.kCheckSumLocation, prog)
             image = MakeBootable(self.kCheckSumLocation, prog)
             print("Program Length:", len(prog))
-            while(True):
-                print("Sector", sector)
-                DataChunk = image[writeCount : writeCount + SectorBytes]
-                if(not len(DataChunk)):
-                    break
-                elif(len(DataChunk) != SectorBytes):
-                    DataChunk += bytes([0xff] *(SectorBytes - len(DataChunk)))
-                assert(sector < self.SectorCount)
-                self.PrepSectorsForWrite(sector, sector)
-                sleep(.1)
-                self.EraseSector(sector, sector)
-                sleep(.1)
-                assert(self.CheckSectorsBlank(sector, sector))
-                sleep(.1)
 
-                print("Write Flash")
-                self.PrepSectorsForWrite(sector, sector)
-                sleep(.1)
-                self.WriteFlashSector(sector, DataChunk)
-                sleep(.1)
-                #assert(self.ReadSector(sector) == DataChunk)
-                print("Flash Written")
-
-                writeCount += SectorBytes
-                sector += 1
-            #write the cpu exception vector
+            sector_count = int(math.ceil(len(prog)/SectorBytes))
+            assert(sector_count <= self.SectorCount)
+            for sector in reversed(range(sector_count)):
+                print("Writing Sector %d"%sector)
+                DataChunk = image[sector * SectorBytes : (sector + 1) * SectorBytes]
+                self.WriteSector(sector, DataChunk)
 
         chip_flash_sig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
         print("Flash Signature: %s"%chip_flash_sig)
@@ -528,40 +534,47 @@ class NXPChip(ISPChip):
         print("Checking Sectors are blank")
         assert(self.CheckSectorsBlank(0, kSectorEnd))
 
-def MakeBootable(vector_table_loc, orig_image):
-    #Calculate 2's compliment of the checksum
-    #of table entries 0 to 6
-    import struct
-    u32_mod = (1<<32)
-    # make this a valid image by inserting a checksum in the correct place
+def RemoveBootableCheckSum(vector_table_loc, image):
+    kuint32_t_size = 4
+    MakeBootable(vector_table_loc, orig_image)
+    for byte in range(kuint32_t_size):
+        image[vector_table_loc * kuint32_t_size + byte] = 0
 
-    #kTableEntriesChecked = 6
-    #table = image[vector_table_loc - kTableEntriesChecked : vector_table_loc]
-    # <8I is littl endian, 8 bits, as 32 bit integers
-    intvecs = struct.unpack("<8I", orig_image[0:32])
-    # default vector is 5: 0x14, new cortex cpus use 7: 0x1c
-    valid_image_csum_vec = 7
-    # calculate the checksum over the interrupt vectors
+# 2s compliment of checksum
+def CalculateCheckSum(frame):
     csum = 0
-    intvecs_list = []
-    for vec in range(0, len(intvecs)):
-        intvecs_list.append(intvecs[vec])
-        if valid_image_csum_vec == 5 or vec <= valid_image_csum_vec:
-            csum = csum + intvecs[vec]
-    # remove the value at the checksum location
-    csum -= intvecs[valid_image_csum_vec]
-    csum %= u32_mod
-    csum = u32_mod - csum
+    for entry in frame:
+        csum += entry
+    return (1<<32) - (csum % (1<<32))
 
-    print("Inserting intvec checksum 0x%08x in image at offset %d" %
-            (csum, valid_image_csum_vec))
+def Crc32(frame):
+    #CRC32
+    polynomial = 0x104c11db6
+    crc = Crc(width = 32, poly = polynomial,reflect_in = True, xor_in = (1<<32)-1, reflect_out = True, xor_out = 0x00)
+    crc_calc = crc.bit_by_bit(frame)
+    return crc_calc
 
-    intvecs_list[valid_image_csum_vec] = csum
+def GetCheckSumedVectorTable(vector_table_loc, orig_image):
+    # make this a valid image by inserting a checksum in the correct place
+    kVectorTableSize = 8
+    kuint32_t_size = 4
 
-    image = b''
+    # Make byte array into list of little endian 32 bit words
+    intvecs = struct.unpack("<%dI"%kVectorTableSize, orig_image[:kVectorTableSize * kuint32_t_size])
+
+    # calculate the checksum over the interrupt vectors
+    intvecs_list = list(intvecs[:kVectorTableSize])
+    intvecs_list[vector_table_loc] = 0 # clear csum value
+    csum = CalculateCheckSum(intvecs_list)
+    intvecs_list[vector_table_loc] = csum
+    vector_table_bytes = b''
     for vecval in intvecs_list:
-        image += struct.pack("<I", vecval)
+        vector_table_bytes += struct.pack("<I", vecval)
+    return vector_table_bytes
 
-    image += orig_image[32:]
+def MakeBootable(vector_table_loc, orig_image):
+    vector_table_bytes = GetCheckSumedVectorTable(vector_table_loc, orig_image)
+
+    image = vector_table_bytes + orig_image[len(vector_table_bytes):]
     return image
 
