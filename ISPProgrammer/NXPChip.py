@@ -63,6 +63,16 @@ class NXPChip(ISPChip):
         "CRP3" : 0x43218765,
     }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.CrystalFrequency = 12000#khz == 30MHz
+        self.SectorCount = 0
+        self.RAMSize = 0
+        self.RAMRange = 0
+        self.FlashRange = 0
+        self.RAMStartWrite = 0
+        self.kCheckSumLocation = 7 #0x0000001c
+
     @classmethod
     def GetErrorCodeName(cls, code : int) -> str:
         code = int(code)
@@ -326,7 +336,6 @@ class NXPChip(ISPChip):
                 self.ClearBuffer()
             except TimeoutError:
                 pass
-            self.CheckPartType()
             uid = self.ReadUID()
             print("Part UID: %s"%uid)
             bootCodeVersion = self.ReadBootCodeVersion()
@@ -403,12 +412,6 @@ class NXPChip(ISPChip):
         if not verified:
             raise UserWarning("Verification Failure")
 
-
-    def CheckPartType(self):
-        PartID = self.ReadPartID()
-        if(PartID not in self.PartIDs):
-            raise UserWarning("%s recieved 0x%08x"%(self.ChipName, PartID))
-        print("Part Check Successful, 0x%08x"%(PartID))
 
     def CheckFlashWrite(Data, FlashAddress : int):
         '''

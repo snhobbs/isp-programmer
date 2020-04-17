@@ -80,7 +80,10 @@ class ISPChip(object):
         self.frame.clear()
 
     def Read(self):
-        self.DataBufferIn.extend(self.iodevice.ReadAll())
+        data_in = self.iodevice.ReadAll()
+        #if len(data_in):
+        #    print(data_in.decode("utf-8"))
+        self.DataBufferIn.extend(data_in)
 
     def ReadFrame(self):
         '''

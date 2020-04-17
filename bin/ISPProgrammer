@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-from ISPProgrammer import LPC80x, LPC84x, LPC175_6x, MockUart, UartDevice
+from ISPProgrammer import MockUart, UartDevice, NXPChip
 import click
+from timeout_decorator import TimeoutError
 
-INSTALLED_FAMILIES = (
-    LPC80x, 
-    LPC84x,
-    LPC175_6x
-)
 BAUDRATES = (
     9600,
     19200,
@@ -16,65 +12,93 @@ BAUDRATES = (
     230400,
     460800
 )
-DEFAULT_BAUD = BAUDRATES[3]# breaks with 115200
-
-CHIPS = []
-for family in INSTALLED_FAMILIES:
-    CHIPS.extend(family.Family)
-
 @click.group()
-def gr1():
-    pass
+@click.option('--device', '-d', default='/dev/ttyUSB0', help='Serial device')
+@click.option('--baud', '-b', type = int, default=9600, help='Baudrate')
+@click.option('--crystal_frequency', '-c', type = int, default=12000, help="Crystal frequency of chip in khz")
+@click.option('--config_file', '-f', default='/etc/lpctools_parts.def', help='Parts definition file')
+@click.pass_context
+def gr1(ctx, **kwargs):
+    ctx.ensure_object(dict)
+    ctx.obj.update(kwargs)
 
+def ReadChipFile(fname):
+    data = []
+    with open(fname, 'r') as f:
+        for line in f:
+            if line.strip()[0] == '#':
+                continue
+            elif len(line.strip()) == 0:
+                continue
+            data.append(line.split(","))
+    return data
 
-def SetupChip(chipname, device = "/dev/ttyUSB0"):
-    chip = None
-    for ChipFamily in INSTALLED_FAMILIES:
-        if chipname in ChipFamily.Family:
-            #iodevice = MockUart(device, baudrate = ChipFamily.MAXBAUDRATE)
-            iodevice = UartDevice(device, baudrate = ChipFamily.MAXBAUDRATE)
-            chip = ChipFamily(iodevice)
-            break
-    if(chip is None):
-        raise UserWarning("Chip %s unknown"%chipname)
+def GetPartDescriptor(fname, partid):
+    entries = ReadChipFile(fname)
+    for entry in entries:
+        if partid == int(entry[0], 0):
+            return entry
 
+def SetupChip(baudrate, device, crystal_frequency, chip_file):
+    #print(baudrate, device, crystal_frequency, chip_file)
+    iodevice = UartDevice(device, baudrate = baudrate)
+    chip = NXPChip(iodevice)
     chip.InitConnection()
-    print("Initiated %s"%chipname)
-    chip.ChangeBaudRate(chip.MAXBAUDRATE)
-    print("Setup chip Baudrate set to:", chip.MAXBAUDRATE)
+    while True:
+        try:
+            part_id = chip.ReadPartID()
+            break
+        except TimeoutError:
+            pass
+    descriptor = GetPartDescriptor(chip_file, part_id)
+    if(descriptor is None):
+        raise UserWarning("Warning chip %s not found in file %s"%(hex(part_id), chip_file))
 
+    print(part_id, descriptor[1])
+    chip.CrystalFrequency = 12000#khz == 30MHz
+    chip.SectorCount = int(descriptor[4])
+    chip.RAMSize = int(descriptor[7], 0)
+
+    ramstart = int(descriptor[6], 0)
+    chip.RAMRange = (ramstart, ramstart + chip.RAMSize - 1)
+
+    flashstart = int(descriptor[2], 0) 
+    flashsize = int(descriptor[3], 0)
+    chip.FlashRange = (flashstart, flashstart + flashsize - 1)
+
+    ram_buffer_offset = int(descriptor[8], 0)
+    chip.RAMStartWrite = ramstart + ram_buffer_offset 
+    chip.kCheckSumLocation = 7 #0x0000001c
+
+    assert(chip.RAMRange[1]-chip.RAMRange[0] == chip.RAMSize - 1)
     return chip
 
-@click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
-@click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
 @gr1.command()
-def QueryChip(device, chipname):
-    chip = SetupChip(chipname, device)
+@click.pass_context
+def QueryChip(ctx):
+    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
 
-@click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
-@click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
 @gr1.command()
-def MassErase(device, chipname):
-    chip = SetupChip(chipname, device)
+@click.pass_context
+def MassErase(ctx):
+    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
     chip.MassErase()
     print("Mass Erase Successful")
 
-@click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
-@click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
 @click.option('--imagein', type = str, required = True, help='Location of hex file to program')
 @gr1.command()
-def WriteImage(device, chipname, imagein):
-    chip = SetupChip(chipname, device)
+@click.pass_context
+def WriteImage(ctx, imagein):
+    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
     chip.WriteImage(imagein)
     #chip.Go(0, ThumbMode=False)
     chip.Go(0, ThumbMode=True)
 
-@click.option('--device', '-d', type = str, default = "/dev/ttyUSB0", help='Serial Device, defaults to /dev/ttyUSB0')
-@click.option('--chipname', '-c', type = click.Choice(CHIPS), required = True, help='Chip Type')
 @click.option('--imageout', type = str, required = True, help='Name of hex file output')
 @gr1.command()
-def ReadImage(device, chipname, imageout):
-    chip = SetupChip(chipname, device)
+@click.pass_context
+def ReadImage(ctx, imageout):
+    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
     chip.ReadImage(imageout)
 
 if __name__ == "__main__":
