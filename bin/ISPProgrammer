@@ -41,7 +41,8 @@ def GetPartDescriptor(fname, partid):
 
 def SetupChip(baudrate, device, crystal_frequency, chip_file):
     #print(baudrate, device, crystal_frequency, chip_file)
-    iodevice = UartDevice(device, baudrate = baudrate)
+    kStartingBaudRate = 9600
+    iodevice = UartDevice(device, baudrate = kStartingBaudRate)
     chip = NXPChip(iodevice)
     chip.InitConnection()
     while True:
@@ -71,6 +72,8 @@ def SetupChip(baudrate, device, crystal_frequency, chip_file):
     chip.kCheckSumLocation = 7 #0x0000001c
 
     assert(chip.RAMRange[1]-chip.RAMRange[0] == chip.RAMSize - 1)
+    print("Setting new baudrate %d"%baudrate)
+    chip.ChangeBaudRate(baudrate) 
     return chip
 
 @gr1.command()

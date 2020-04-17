@@ -430,34 +430,35 @@ class NXPChip(ISPChip):
         RAMAddress = self.RAMStartWrite
         sectorSizeBytes = self.kPageSizeBytes*self.SectorSizePages
         FlashAddress = self.FlashRange[0] + sector*sectorSizeBytes
-        print("Writing Sector: %d\nFlash Address: %x\nRAM Address: %x\n"%(sector, FlashAddress, RAMAddress))
+        print("\nWriting Sector: %d\nFlash Address: %x\nRAM Address: %x\n"%(sector, FlashAddress, RAMAddress))
 
         assert(len(Data) == sectorSizeBytes)
         #Data += bytes(sectorSizeBytes - len(Data))
 
         data_crc = zlib.crc32(Data, 0)
-        sleep(.1)
+        #sleep(.1)
         try:
             ram_crc = self.ReadCRC(RAMAddress, num_bytes = len(Data))
         except:
             ram_crc = self.ReadCRC(RAMAddress, num_bytes = len(Data))
         while(ram_crc != data_crc):
-            sleep(.1)
+            sleep(.01)
             self.WriteToRam(RAMAddress, Data)
-            sleep(.1)
+            sleep(.01)
             ram_crc = self.ReadCRC(RAMAddress, num_bytes = len(Data))
             if(data_crc != ram_crc):
                 print("CRC Check failed", data_crc, ram_crc)
         assert(data_crc == ram_crc)
 
         print("Prep Sector")
-        assert(self.CheckSectorsBlank(sector, sector))
-        sleep(.1)
+        sector_blank = self.CheckSectorsBlank(sector, sector)
+        assert(sector_blank)
+        sleep(.01)
         self.PrepSectorsForWrite(sector, sector)
-        sleep(.1)
+        sleep(.01)
         print("Write to Flash")
         self.CopyRAMToFlash(FlashAddress, RAMAddress, sectorSizeBytes)
-        sleep(.1)
+        sleep(.01)
         flash_crc = self.ReadCRC(FlashAddress, num_bytes = len(Data))
         assert(flash_crc == data_crc)
         assert(self.MemoryLocationsEqual(FlashAddress, RAMAddress, sectorSizeBytes))
@@ -472,16 +473,16 @@ class NXPChip(ISPChip):
         assert(len(data))
         filled_data = self.FillDataToFitSector(data)
         self.PrepSectorsForWrite(sector, sector)
-        sleep(.1)
+        sleep(.01)
         self.EraseSector(sector, sector)
-        sleep(.1)
+        sleep(.01)
         assert(self.CheckSectorsBlank(sector, sector))
-        sleep(.1)
+        sleep(.01)
 
         self.PrepSectorsForWrite(sector, sector)
-        sleep(.1)
+        sleep(.01)
         self.WriteFlashSector(sector, filled_data)
-        sleep(.1)
+        sleep(.01)
         #assert(self.ReadSector(sector) == DataChunk)
 
     def WriteImage(self, ImageFile : str):
@@ -501,7 +502,7 @@ class NXPChip(ISPChip):
             sector_count = int(math.ceil(len(prog)/SectorBytes))
             assert(sector_count <= self.SectorCount)
             for sector in reversed(range(sector_count)):
-                print("Writing Sector %d"%sector)
+                print("\nWriting Sector %d"%sector)
                 DataChunk = image[sector * SectorBytes : (sector + 1) * SectorBytes]
                 self.WriteSector(sector, DataChunk)
 
