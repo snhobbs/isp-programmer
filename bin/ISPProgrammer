@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-from ISPProgrammer import MockUart, UartDevice, NXPChip
 import click
-from timeout_decorator import TimeoutError
+#from timeout_decorator import TimeoutError
+import ISPProgrammer
 
 BAUDRATES = (
     9600,
@@ -14,36 +14,37 @@ BAUDRATES = (
 )
 @click.group()
 @click.option('--device', '-d', default='/dev/ttyUSB0', help='Serial device')
-@click.option('--baud', '-b', type = int, default=9600, help='Baudrate')
-@click.option('--crystal_frequency', '-c', type = int, default=12000, help="Crystal frequency of chip in khz")
-@click.option('--config_file', '-f', default='/etc/lpctools_parts.def', help='Parts definition file')
+@click.option('--baud', '-b', type=int, default=9600, help='Baudrate')
+@click.option('--crystal_frequency', '-c', type=int, default=12000,
+              help="Crystal frequency of chip in khz")
+@click.option('--config_file', '-f', default='/etc/lpctools_parts.def',
+              help='Parts definition file')
 @click.pass_context
 def gr1(ctx, **kwargs):
     ctx.ensure_object(dict)
     ctx.obj.update(kwargs)
 
-def ReadChipFile(fname):
+def ReadChipFile(fname: str) -> list:
     data = []
     with open(fname, 'r') as f:
         for line in f:
-            if line.strip()[0] == '#':
-                continue
-            elif len(line.strip()) == 0:
+            if not line.strip() or line.strip()[0] == '#':
                 continue
             data.append(line.split(","))
     return data
 
-def GetPartDescriptor(fname, partid):
+def GetPartDescriptor(fname: str, partid: int) -> str:
     entries = ReadChipFile(fname)
     for entry in entries:
         if partid == int(entry[0], 0):
             return entry
+    raise UserWarning("PartId {0x%x} not found in {}".format(partid, fname))
 
-def SetupChip(baudrate, device, crystal_frequency, chip_file):
+def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str) -> ISPProgrammer.NXPChip:
     #print(baudrate, device, crystal_frequency, chip_file)
     kStartingBaudRate = 9600
-    iodevice = UartDevice(device, baudrate = kStartingBaudRate)
-    chip = NXPChip(iodevice)
+    iodevice = ISPProgrammer.UartDevice(device, baudrate=kStartingBaudRate)
+    chip = ISPProgrammer.NXPChip(iodevice)
     chip.InitConnection()
     while True:
         try:
@@ -52,34 +53,35 @@ def SetupChip(baudrate, device, crystal_frequency, chip_file):
         except TimeoutError:
             pass
     descriptor = GetPartDescriptor(chip_file, part_id)
-    if(descriptor is None):
+    if descriptor is None:
         raise UserWarning("Warning chip %s not found in file %s"%(hex(part_id), chip_file))
 
     print(part_id, descriptor[1])
-    chip.CrystalFrequency = 12000#khz == 30MHz
+    chip.CrystalFrequency = crystal_frequency#12000#khz == 30MHz
     chip.SectorCount = int(descriptor[4])
     chip.RAMSize = int(descriptor[7], 0)
 
     ramstart = int(descriptor[6], 0)
     chip.RAMRange = (ramstart, ramstart + chip.RAMSize - 1)
 
-    flashstart = int(descriptor[2], 0) 
+    flashstart = int(descriptor[2], 0)
     flashsize = int(descriptor[3], 0)
     chip.FlashRange = (flashstart, flashstart + flashsize - 1)
 
     ram_buffer_offset = int(descriptor[8], 0)
-    chip.RAMStartWrite = ramstart + ram_buffer_offset 
+    chip.RAMStartWrite = ramstart + ram_buffer_offset
     chip.kCheckSumLocation = 7 #0x0000001c
 
-    assert(chip.RAMRange[1]-chip.RAMRange[0] == chip.RAMSize - 1)
+    if(chip.RAMRange[1]-chip.RAMRange[0] != chip.RAMSize - 1):
+        raise ValueError("RAM size for {0x%x} is wrong".format(part_id))
     print("Setting new baudrate %d"%baudrate)
-    chip.ChangeBaudRate(baudrate) 
+    chip.ChangeBaudRate(baudrate)
     return chip
 
 @gr1.command()
 @click.pass_context
 def QueryChip(ctx):
-    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
+    SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
 
 @gr1.command()
 @click.pass_context
@@ -88,7 +90,7 @@ def MassErase(ctx):
     chip.MassErase()
     print("Mass Erase Successful")
 
-@click.option('--imagein', type = str, required = True, help='Location of hex file to program')
+@click.option('--imagein', type=str, required=True, help='Location of hex file to program')
 @gr1.command()
 @click.pass_context
 def WriteImage(ctx, imagein):
@@ -97,10 +99,10 @@ def WriteImage(ctx, imagein):
     #chip.Go(0, ThumbMode=False)
     chip.Go(0, ThumbMode=True)
 
-@click.option('--imageout', type = str, required = True, help='Name of hex file output')
+@click.option('--imageout', type=str, required=True, help='Name of hex file output')
 @gr1.command()
 @click.pass_context
-def ReadImage(ctx, imageout):
+def ReadImage(ctx, imageout: str):
     chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
     chip.ReadImage(imageout)
 
