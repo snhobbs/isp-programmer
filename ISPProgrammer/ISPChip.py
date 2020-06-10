@@ -1,4 +1,3 @@
-from time import sleep
 from collections import deque
 from serial import Serial
 from timeout_decorator import timeout
@@ -39,15 +38,15 @@ class UartDevice(IODevice):
     def GetBaudrate(self):
         return self.uart.baudrate
 
-class ISPChip(object):
+class ISPChip:
     kNewLine = "\r\n"
     def __init__(self, iodevice: IODevice):
         self.iodevice = iodevice
         self.frame = []
-        self.DataBufferIn = deque()
+        self.data_buffer_in = deque()
 
     @property
-    def BaudRate(self):
+    def baud_rate(self):
         return self.iodevice.GetBaudrate()
 
     def ChangeBaudRate(self, baudrate: int):
@@ -74,33 +73,33 @@ class ISPChip(object):
         return frame
 
     def ClearBuffer(self):
-        self.DataBufferIn.clear()
+        self.data_buffer_in.clear()
         self.frame.clear()
 
     def Read(self):
         data_in = self.iodevice.ReadAll()
         #if len(data_in):
         #    print(data_in.decode("utf-8"))
-        self.DataBufferIn.extend(data_in)
+        self.data_buffer_in.extend(data_in)
 
     def ReadFrame(self):
         '''
         Fill the recieving buffer until
         '''
-        fNewFrame = False
+        f_new_frame = False
 
-        while len(self.DataBufferIn) != 0:
-            ch = self.DataBufferIn.popleft()
+        while len(self.data_buffer_in) != 0:
+            ch = self.data_buffer_in.popleft()
             #print(hex(ch), chr(ch))
             self.frame.append(ch)
             if chr(ch) == self.kNewLine[-1]:
                 #print("New Frame")
-                fNewFrame = True
+                f_new_frame = True
                 break
-        return fNewFrame
+        return f_new_frame
 
     def Check(self, *args, **kwargs):
         raise NotImplementedError
 
-    def InitConnection(self, *args, **kwargs):
+    def InitConnection(self):
         raise NotImplementedError

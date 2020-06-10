@@ -42,47 +42,50 @@ NXPReturnCodes = {
     "NoStatusResponse"                          : 0xff,
 }
 
-def GetErrorCodeName(code : int) -> str:
+def GetErrorCodeName(code: int) -> str:
     code = int(code)
     for item in NXPReturnCodes.items():
         if code == item[1]:
             return item[0]
     return "Not Found"
 
-def RaiseReturnCodeError(code : int, call_name : str) -> None:
-    if(int(code) != NXPReturnCodes["CMD_SUCCESS"]):
-        raise UserWarning("Return Code Failure in {} {} {}".format(call_name, GetErrorCodeName(code), code))
+def RaiseReturnCodeError(code: int, call_name: str) -> None:
+    if int(code) != NXPReturnCodes["CMD_SUCCESS"]:
+        raise UserWarning(
+            "Return Code Failure in {} {} {}".format(call_name, GetErrorCodeName(code), code))
 
-def RemoveBootableCheckSum(vector_table_loc, image):
+def RemoveBootableCheckSum(vector_table_loc: int, image: bytes):
     kuint32_t_size = 4
     MakeBootable(vector_table_loc, image)
     for byte in range(kuint32_t_size):
         image[vector_table_loc * kuint32_t_size + byte] = 0
 
 # 2s compliment of checksum
-def CalculateCheckSum(frame):
+def CalculateCheckSum(frame) -> int:
     csum = 0
     for entry in frame:
         csum += entry
     return (1<<32) - (csum % (1<<32))
 
-def Crc32(frame):
+def Crc32(frame) -> int:
     #CRC32
     polynomial = 0x104c11db6
-    crc = Crc(width = 32, poly = polynomial,reflect_in = True, xor_in = (1<<32)-1, reflect_out = True, xor_out = 0x00)
+    crc = Crc(width=32, poly=polynomial, reflect_in=True,
+              xor_in=(1<<32)-1, reflect_out=True, xor_out=0x00)
     crc_calc = crc.bit_by_bit(frame)
     return crc_calc
 
-def GetCheckSumedVectorTable(vector_table_loc, orig_image):
+def GetCheckSumedVectorTable(vector_table_loc: int, orig_image: bytes) -> bytes:
     # make this a valid image by inserting a checksum in the correct place
-    kVectorTableSize = 8
+    vector_table_size = 8
     kuint32_t_size = 4
 
     # Make byte array into list of little endian 32 bit words
-    intvecs = struct.unpack("<%dI"%kVectorTableSize, orig_image[:kVectorTableSize * kuint32_t_size])
+    intvecs = struct.unpack("<%dI"%vector_table_size,
+                            orig_image[:vector_table_size * kuint32_t_size])
 
     # calculate the checksum over the interrupt vectors
-    intvecs_list = list(intvecs[:kVectorTableSize])
+    intvecs_list = list(intvecs[:vector_table_size])
     intvecs_list[vector_table_loc] = 0 # clear csum value
     csum = CalculateCheckSum(intvecs_list)
     intvecs_list[vector_table_loc] = csum
@@ -91,14 +94,14 @@ def GetCheckSumedVectorTable(vector_table_loc, orig_image):
         vector_table_bytes += struct.pack("<I", vecval)
     return vector_table_bytes
 
-def MakeBootable(vector_table_loc, orig_image):
+def MakeBootable(vector_table_loc: int, orig_image: bytes) -> bytes:
     vector_table_bytes = GetCheckSumedVectorTable(vector_table_loc, orig_image)
 
     image = vector_table_bytes + orig_image[len(vector_table_bytes):]
     return image
 
-def FillDataToFitSector(data, size):
-    if (len(data) != size):
+def FillDataToFitSector(data: bytes, size: int) -> bytes:
+    if len(data) != size:
         data += bytes([0xff] *(size - len(data)))
     return data
 
@@ -134,7 +137,7 @@ class NXPChip(ISPChip):
         self.kCheckSumLocation = 7 #0x0000001c
 
     def GetReturnCode(self) -> int:
-        for i in range(10):
+        for _ in range(10):
             #sleep(.1)
             try:
                 resp = self.ReadLine().strip()
@@ -143,7 +146,7 @@ class NXPChip(ISPChip):
                 pass
         return self.ReturnCodes["NoStatusResponse"]
 
-    def AssertReturnCode(self, call_name : str) -> None:
+    def AssertReturnCode(self, call_name: str) -> None:
         '''
         Get a return code with no response
         '''
@@ -151,8 +154,8 @@ class NXPChip(ISPChip):
         RaiseReturnCodeError(code, call_name)
 
     def Write(self, string) -> None:
-        if type(string) != bytes:
-            out = bytes(string, encoding = "utf-8")
+        if not isinstance(bytes, string):
+            out = bytes(string, encoding="utf-8")
         else:
             out = string
         #print(out)
@@ -162,10 +165,10 @@ class NXPChip(ISPChip):
     '''
     Takes the command string, return the response code
     '''
-    def WriteCommand(self, command_string) -> int:
-       self.Write(command_string)
-       self.Write(self.kNewLine)
-       return self.GetReturnCode()
+    def WriteCommand(self, command_string: str) -> int:
+        self.Write(command_string)
+        self.Write(self.kNewLine)
+        return self.GetReturnCode()
 
     def Unlock(self):
         '''
@@ -175,14 +178,14 @@ class NXPChip(ISPChip):
         response_code = self.WriteCommand("U 23130")
         RaiseReturnCodeError(response_code, "Unlock")
 
-    def SetBaudRate(self, baudRate, stopBits = 1):
+    def SetBaudRate(self, baud_rate: int, stop_bits: int = 1):
         '''
         Baud Depends of FAIM config, stopbit is 1 or 2
         '''
-        response_code = self.WriteCommand("B {} {}".format(baudRate, stopBits))
+        response_code = self.WriteCommand("B {} {}".format(baud_rate, stop_bits))
         RaiseReturnCodeError(response_code, "Set Baudrate")
 
-    def Echo(self, on : bool = True):
+    def Echo(self, on: bool = True):
         '''
         ISP echos host when enabled
         '''
@@ -193,21 +196,21 @@ class NXPChip(ISPChip):
         response_code = self.WriteCommand(command)
         RaiseReturnCodeError(response_code, "Set Echo")
 
-    def WriteToRam(self, StartLoc : int , Data : bytes):
-        assert(len(Data)%self.kWordSize == 0)
-        assert(StartLoc+len(Data) < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
+    def WriteToRam(self, start: int, data: bytes):
+        assert len(data)%self.kWordSize == 0
+        assert(start+len(data) < self.RAMRange[1] and start >= self.RAMRange[0])
 
-        print("Write to RAM %d bytes"%len(Data))
-        #while i < len(Data):
-        #    self.Write("W %d %d"%(StartLoc + i, kWordSize))
+        print("Write to RAM %d bytes"%len(data))
+        #while i < len(data):
+        #    self.Write("W %d %d"%(start + i, kWordSize))
         #    self.AssertReturnCode("Write to RAM")#get confirmation
-        #    self.Write(Data[i:i+kWordSize])#Stream data after confirmation
+        #    self.Write(data[i:i+kWordSize])#Stream data after confirmation
         #    i+=kWordSize
 
         #when transfer is complete the handler sends OK<CR><LF>
-        response_code = self.WriteCommand("W %d %d"%(StartLoc, len(Data)))
+        response_code = self.WriteCommand("W %d %d"%(start, len(data)))
         RaiseReturnCodeError(response_code, "Write to RAM")
-        self.Write(Data)#Stream data after confirmation
+        self.Write(data)#Stream data after confirmation
         #self.Write("OK"+self.kNewLine)
         try:
             print(self.ReadLine())
@@ -215,9 +218,9 @@ class NXPChip(ISPChip):
             return
 
     @timeout(4)
-    def ReadMemory(self, StartLoc : int, num_bytes : int):
-        assert(num_bytes%self.kWordSize == 0)
-        #assert(StartLoc+num_bytes < self.RAMRange[1] and StartLoc >= self.RAMRange[0])
+    def ReadMemory(self, start: int, num_bytes: int):
+        assert num_bytes%self.kWordSize == 0
+        #assert(start+num_bytes < self.RAMRange[1] and start >= self.RAMRange[0])
         print("ReadMemory")
 
         #self.Flush()
@@ -225,74 +228,72 @@ class NXPChip(ISPChip):
         #self.ClearBuffer()
         #self.Flush()
 
-        print("R %d %d"%(StartLoc, num_bytes))
-        response_code = self.WriteCommand("R %d %d"%(StartLoc, num_bytes))
+        print("R %d %d"%(start, num_bytes))
+        response_code = self.WriteCommand("R %d %d"%(start, num_bytes))
         RaiseReturnCodeError(response_code, "Read Memory")
 
-        while(len(self.DataBufferIn) < (num_bytes)):
+        while len(self.data_buffer_in) < (num_bytes):
             self.Read()
         # Command success is sent at the end of the transferr
         data = []
-        while(len(self.DataBufferIn)):
-            ch = self.DataBufferIn.popleft()
+        while self.data_buffer_in:
+            ch = self.data_buffer_in.popleft()
             data.append(ch)
 
-        if(len(data) != num_bytes):
+        if len(data) != num_bytes:
             print(data, len(data), num_bytes)
-        assert(len(data) == num_bytes)
+        assert len(data) == num_bytes
         return bytes(data)
 
-    def PrepSectorsForWrite(self, StartSector: int, EndSector: int):
+    def PrepSectorsForWrite(self, start: int, end: int):
         try:
-            response_code = self.WriteCommand("P %d %d"%(StartSector, EndSector))
-        except:
-            response_code = self.WriteCommand("P %d %d"%(StartSector, EndSector))
+            response_code = self.WriteCommand("P %d %d"%(start, end))
+        except Exception:
+            response_code = self.WriteCommand("P %d %d"%(start, end))
         RaiseReturnCodeError(response_code, "Prep Sectors")
 
-    def CopyRAMToFlash(self, FlashAddress: int, RAMAddress: int, num_bytes : int):
-        assert(RAMAddress+num_bytes < self.RAMRange[1] and RAMAddress >= self.RAMRange[0])
-        assert(FlashAddress + num_bytes < self.FlashRange[1] and FlashAddress >= self.FlashRange[0])
+    def CopyRAMToFlash(self, flash_address: int, ram_address: int, num_bytes: int):
+        assert(ram_address+num_bytes < self.RAMRange[1] and ram_address >= self.RAMRange[0])
+        assert(flash_address + num_bytes < self.FlashRange[1] and flash_address >= self.FlashRange[0])
 
-        assert(FlashAddress%self.kPageSizeBytes == 0)
-        assert(RAMAddress%self.kWordSize == 0)
+        assert(flash_address%self.kPageSizeBytes == 0)
+        assert(ram_address%self.kWordSize == 0)
 
-        response_code = self.WriteCommand("C %d %d %d"%(FlashAddress, RAMAddress, num_bytes))
+        response_code = self.WriteCommand("C %d %d %d"%(flash_address, ram_address, num_bytes))
         RaiseReturnCodeError(response_code, "Copy RAM To Flash")
         #sleep(.2)
 
-    def Go(self, Address: bool, ThumbMode: bool = False):
+    def Go(self, address: int, thumb_mode: bool = False):
         '''
         Start executing code at the specified spot
         '''
         mode = ""
-        if ThumbMode:
+        if thumb_mode:
             mode = 'T'
-        response_code = self.WriteCommand("G %d %s"%(Address, mode))
+        response_code = self.WriteCommand("G %d %s"%(address, mode))
         RaiseReturnCodeError(response_code, "Go")
 
-    def EraseSector(self, StartSector: int, EndSector: int):
-        response_code = self.WriteCommand("E %d %d"%(StartSector, EndSector))
+    def EraseSector(self, start: int, end: int):
+        response_code = self.WriteCommand("E %d %d"%(start, end))
         RaiseReturnCodeError(response_code, "Erase Sectors")
 
-    def ErasePages(self, StartPage: int, EndPage: int):
-        response_code = self.WriteCommand("X %d %d"%(StartPage, EndPage))
+    def ErasePages(self, start: int, end: int):
+        response_code = self.WriteCommand("X %d %d"%(start, end))
         RaiseReturnCodeError(response_code, "Erase Pages")
 
-    def CheckSectorsBlank(self, StartSector: int, EndSector: int) -> bool:
-        assert(StartSector <= EndSector)
-        response_code = self.WriteCommand("I %d %d"%(StartSector, EndSector) + self.kNewLine)
+    def CheckSectorsBlank(self, start: int, end: int) -> bool:
+        assert(start <= end)
+        response_code = self.WriteCommand("I %d %d"%(start, end) + self.kNewLine)
         try:
             self.ReadLine()
             response = self.ReadLine().strip()
             print("Check Sectors Blank response", response)
         except TimeoutError:
             pass
-        if response_code == NXPReturnCodes["CMD_SUCCESS"]:
-            return True
-        elif response_code == NXPReturnCodes["SECTOR_NOT_BLANK"]:
-            return False
 
-        RaiseReturnCodeError(response_code, "Blank Check Sectors")
+        if response_code not in (NXPReturnCodes["CMD_SUCCESS"], NXPReturnCodes["SECTOR_NOT_BLANK"]):
+            RaiseReturnCodeError(response_code, "Blank Check Sectors")
+        return response_code == NXPReturnCodes["CMD_SUCCESS"]
 
     def ReadPartID(self):
         response_code = self.WriteCommand("J")
@@ -302,53 +303,51 @@ class NXPChip(ISPChip):
 
     def ReadBootCodeVersion(self):
         '''
-        LPC84x sends a 0x1a first for some reason. Also the boot version seems to be Minor then Major not like the docs say
+        LPC84x sends a 0x1a first for some reason.
+        Also the boot version seems to be Minor then Major not like the docs say
         '''
         response_code = self.WriteCommand("K")
         RaiseReturnCodeError(response_code, "Read Bootcode Version")
-        Minor = self.ReadLine().strip()
-        Major = self.ReadLine().strip()
-        return "%d.%d"%(int(Major), int(Minor))
+        minor = self.ReadLine().strip()
+        major = self.ReadLine().strip()
+        return "%d.%d"%(int(major), int(minor))
 
 
     '''
     Checks to see if two sections in the memory map are equal
     '''
-    def MemoryLocationsEqual(self, Address1 : int, Address2 : int, num_bytes : int):
-        self.Write("M %d %d %d"%(Address1, Address2, num_bytes) + self.kNewLine)
+    def MemoryLocationsEqual(self, address1: int, address2: int, num_bytes: int):
+        self.Write("M %d %d %d"%(address1, address2, num_bytes) + self.kNewLine)
         response = self.ReadLine()
         response_code = int(response[0])
-        if response_code == NXPReturnCodes["CMD_SUCCESS"]:
-            return True
-        elif response_code == NXPReturnCodes["COMPARE_ERROR"]:
-            # offset of first mismatch
-            print("Memory locations not equal", bytes(response, encoding = "utf-8"))
-            return False
-        RaiseReturnCodeError(response_code, "Compare")
+        if response_code not in (NXPReturnCodes["CMD_SUCCESS"], NXPReturnCodes["COMPARE_ERROR"]):
+            RaiseReturnCodeError(response_code, "Compare")
+        return response_code == NXPReturnCodes["CMD_SUCCESS"]
 
     def ReadUID(self):
         response_code = self.WriteCommand("N")
         RaiseReturnCodeError(response_code, "Read UID")
-        UID0 = self.ReadLine().strip()
-        UID1 = self.ReadLine().strip()
-        UID2 = self.ReadLine().strip()
-        UID3 = self.ReadLine().strip()
-        return " ".join(["0x%08x"%int(uid) for uid in [UID0, UID1, UID2, UID3]])
+        uuids = [
+            self.ReadLine().strip(),
+            self.ReadLine().strip(),
+            self.ReadLine().strip(),
+            self.ReadLine().strip()]
+        return " ".join(["0x%08x"%int(uid) for uid in uuids])
 
-    def ReadCRC(self, Address, num_bytes : int) -> int:
+    def ReadCRC(self, address: int, num_bytes: int) -> int:
         try:
-            response_code = self.WriteCommand("S %d %d"%(Address, num_bytes))
+            response_code = self.WriteCommand("S %d %d"%(address, num_bytes))
         except TimeoutError:
-            response_code = self.WriteCommand("S %d %d"%(Address, num_bytes))
+            response_code = self.WriteCommand("S %d %d"%(address, num_bytes))
 
         RaiseReturnCodeError(response_code, "Read CRC")
         return int(self.ReadLine().strip())
 
-    def ReadFlashSig(self, StartAddress : int, EndAddress : int, WaitStates : int = 2, Mode : int = 0):
-        assert(StartAddress < EndAddress)
-        assert(StartAddress >= self.FlashRange[0])
-        assert(EndAddress <= self.FlashRange[1])
-        response_code = self.WriteCommand("Z %d %d %d %d"%(StartAddress, EndAddress, WaitStates, Mode))
+    def ReadFlashSig(self, start: int, end: int, wait_states: int = 2, mode: int = 0) -> str:
+        assert(start < end)
+        assert(start >= self.FlashRange[0])
+        assert(end <= self.FlashRange[1])
+        response_code = self.WriteCommand("Z %d %d %d %d"%(start, end, wait_states, mode))
         RaiseReturnCodeError(response_code, "Read Flash Signature")
         return self.ReadLine()
 
@@ -360,7 +359,6 @@ class NXPChip(ISPChip):
         self.Flush()
         self.Write(self.kNewLine)
         try:
-            pass
             self.ReadLine()
         except TimeoutError:
             pass
@@ -384,10 +382,10 @@ class NXPChip(ISPChip):
                 pass
             uid = self.ReadUID()
             print("Part UID: %s"%uid)
-            bootCodeVersion = self.ReadBootCodeVersion()
-            print("Boot Code Version: %s"%bootCodeVersion)
-            self.SetBaudRate(self.BaudRate)
-            print("Baudrate set to %d"%self.BaudRate)
+            boot_code_version = self.ReadBootCodeVersion()
+            print("Boot Code Version: %s"%boot_code_version)
+            self.SetBaudRate(self.baud_rate)
+            print("Baudrate set to %d"%self.baud_rate)
         except Exception as e:
             print(e, type(e))
             raise
@@ -400,29 +398,29 @@ class NXPChip(ISPChip):
             self.Write('?'*15)
             #self.Write('?' + self.kNewLine)
             try:
-                FrameIn = self.ReadLine()
-                if(self.SyncString.strip() in FrameIn.strip()):
+                frame_in = self.ReadLine()
+                if self.SyncString.strip() in frame_in.strip():
                     synced = True
                     break
             except TimeoutError:
                 pass
 
-        if(not synced):
+        if not synced:
             #Check for SyncString
             raise UserWarning("Syncronization Failure")
 
         #self.Flush()
         self.Write(self.SyncString)#echo SyncString
         try:
-            FrameIn = self.ReadLine()#discard echo
+            frame_in = self.ReadLine()#discard echo
         except TimeoutError:
             pass
 
         verified = False
         for i in range(3):
             try:
-                FrameIn = self.ReadLine()#Should be OK\r\n
-                if(self.SyncVerified.strip() in FrameIn):
+                frame_in = self.ReadLine()#Should be OK\r\n
+                if self.SyncVerified.strip() in frame_in:
                     verified = True
                     break
             except TimeoutError:
@@ -438,7 +436,7 @@ class NXPChip(ISPChip):
         self.Read()
         self.ClearBuffer()
         self.Flush()
-        for i in range(2):
+        for _ in range(2):
             try:
                 self.ReadLine()
             except TimeoutError:
@@ -449,8 +447,8 @@ class NXPChip(ISPChip):
         verified = False
         for i in range(3):
             try:
-                FrameIn = self.ReadLine()#Should be OK\r\n
-                if(self.SyncVerified.strip() in FrameIn):
+                frame_in = self.ReadLine()#Should be OK\r\n
+                if self.SyncVerified.strip() in frame_in:
                     verified = True
                     break
             except TimeoutError:
@@ -459,40 +457,41 @@ class NXPChip(ISPChip):
             raise UserWarning("Verification Failure")
 
 
-    def CheckFlashWrite(self, Data, FlashAddress: int):
+    def CheckFlashWrite(self, data, flash_address: int) -> bool:
         '''
         Read Memory and compare it to what was written
         '''
 
-        DataRead = self.ReadMemory(FlashAddress, len(Data))
+        data_read = self.ReadMemory(flash_address, len(data))
 
-        assert(len(Data) == len(DataRead))
-        assert(type(Data) == type(DataRead))
-        if(Data != DataRead):
-            return False
-        return True
+        if len(data) != len(data_read):
+            raise ValueError("Read Memory received incorrect amount of data")
+        if isinstance(type(data), data_read):
+            raise TypeError("data written and data read are of different types")
 
-    def WriteFlashSector(self, sector : int, Data : bytes):
-        RAMAddress = self.RAMStartWrite
-        sectorSizeBytes = self.kPageSizeBytes*self.SectorSizePages
-        FlashAddress = self.FlashRange[0] + sector*sectorSizeBytes
-        print("\nWriting Sector: %d\nFlash Address: %x\nRAM Address: %x\n"%(sector, FlashAddress, RAMAddress))
+        return data == data_read
 
-        assert(len(Data) == sectorSizeBytes)
-        #Data += bytes(sectorSizeBytes - len(Data))
+    def WriteFlashSector(self, sector: int, data: bytes):
+        ram_address = self.RAMStartWrite
+        sector_size_bytes = self.kPageSizeBytes*self.SectorSizePages
+        flash_address = self.FlashRange[0] + sector*sector_size_bytes
+        print("\nWriting Sector: %d\nFlash Address: %x\nRAM Address: %x\n"%(sector, flash_address, ram_address))
 
-        data_crc = zlib.crc32(Data, 0)
+        assert(len(data) == sector_size_bytes)
+        #data += bytes(sector_size_bytes - len(data))
+
+        data_crc = zlib.crc32(data, 0)
         #sleep(.1)
         try:
-            ram_crc = self.ReadCRC(RAMAddress, num_bytes = len(Data))
-        except:
-            ram_crc = self.ReadCRC(RAMAddress, num_bytes = len(Data))
-        while(ram_crc != data_crc):
+            ram_crc = self.ReadCRC(ram_address, num_bytes=len(data))
+        except Exception:
+            ram_crc = self.ReadCRC(ram_address, num_bytes=len(data))
+        while ram_crc != data_crc:
             sleep(.01)
-            self.WriteToRam(RAMAddress, Data)
+            self.WriteToRam(ram_address, data)
             sleep(.01)
-            ram_crc = self.ReadCRC(RAMAddress, num_bytes = len(Data))
-            if(data_crc != ram_crc):
+            ram_crc = self.ReadCRC(ram_address, num_bytes=len(data))
+            if data_crc != ram_crc:
                 print("CRC Check failed", data_crc, ram_crc)
         assert(data_crc == ram_crc)
 
@@ -503,17 +502,17 @@ class NXPChip(ISPChip):
         self.PrepSectorsForWrite(sector, sector)
         sleep(.01)
         print("Write to Flash")
-        self.CopyRAMToFlash(FlashAddress, RAMAddress, sectorSizeBytes)
+        self.CopyRAMToFlash(flash_address, ram_address, sector_size_bytes)
         sleep(.01)
-        flash_crc = self.ReadCRC(FlashAddress, num_bytes = len(Data))
+        flash_crc = self.ReadCRC(flash_address, num_bytes=len(data))
         assert(flash_crc == data_crc)
-        assert(self.MemoryLocationsEqual(FlashAddress, RAMAddress, sectorSizeBytes))
+        assert(self.MemoryLocationsEqual(flash_address, ram_address, sector_size_bytes))
 
-    def WriteSector(self, sector, data):
-        assert(len(data))
+    def WriteSector(self, sector: int, data: bytes):
+        assert(data)
 
-        SectorBytes = self.SectorSizePages*self.kPageSizeBytes
-        filled_data = FillDataToFitSector(data, SectorBytes)
+        sector_bytes = self.SectorSizePages*self.kPageSizeBytes
+        filled_data = FillDataToFitSector(data, sector_bytes)
         self.PrepSectorsForWrite(sector, sector)
         sleep(.01)
         self.EraseSector(sector, sector)
@@ -525,28 +524,28 @@ class NXPChip(ISPChip):
         sleep(.01)
         self.WriteFlashSector(sector, filled_data)
         sleep(.01)
-        #assert(self.ReadSector(sector) == DataChunk)
+        #assert(self.ReadSector(sector) == data_chunk)
 
-    def WriteImage(self, ImageFile : str):
+    def WriteImage(self, image_file: str):
         self.Unlock()
-        SectorBytes = self.SectorSizePages*self.kPageSizeBytes
-        assert(SectorBytes%self.kWordSize == 0)
+        sector_bytes = self.SectorSizePages*self.kPageSizeBytes
+        assert(sector_bytes%self.kWordSize == 0)
 
         #make not bootable
-        self.WriteSector(0, bytes([0xde]*SectorBytes))
+        self.WriteSector(0, bytes([0xde]*sector_bytes))
 
-        with open(ImageFile, 'rb') as f:
+        with open(image_file, 'rb') as f:
             prog = f.read()
             #image = RemoveBootableCheckSum(self.kCheckSumLocation, prog)
             image = MakeBootable(self.kCheckSumLocation, prog)
             print("Program Length:", len(prog))
 
-            sector_count = int(math.ceil(len(prog)/SectorBytes))
+            sector_count = int(math.ceil(len(prog)/sector_bytes))
             assert(sector_count <= self.SectorCount)
             for sector in reversed(range(sector_count)):
                 print("\nWriting Sector %d"%sector)
-                DataChunk = image[sector * SectorBytes : (sector + 1) * SectorBytes]
-                self.WriteSector(sector, DataChunk)
+                data_chunk = image[sector * sector_bytes : (sector + 1) * sector_bytes]
+                self.WriteSector(sector, data_chunk)
 
         chip_flash_sig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
         print("Flash Signature: %s"%chip_flash_sig)
@@ -558,25 +557,24 @@ class NXPChip(ISPChip):
                 return sector
         return self.SectorCount - 1
 
-    def ReadSector(self, sector : int) -> bytes:
-        SectorBytes = self.SectorSizePages*self.kPageSizeBytes
-        assert(SectorBytes%self.kWordSize == 0)
-        return self.ReadMemory(sector*SectorBytes, SectorBytes)
+    def ReadSector(self, sector: int) -> bytes:
+        sector_bytes = self.SectorSizePages*self.kPageSizeBytes
+        assert(sector_bytes%self.kWordSize == 0)
+        return self.ReadMemory(sector*sector_bytes, sector_bytes)
 
-    def ReadImage(self, ImageFile : str):
+    def ReadImage(self, image_file: str):
         blank_sector = self.FindFirstBlankSector()
-        with open(ImageFile, 'wb') as f:
+        with open(image_file, 'wb') as f:
             for sector in range(blank_sector):
                 print("Sector ", sector)
                 f.write(self.ReadSector(sector))
 
     def MassErase(self):
-        kSectorEnd = self.SectorCount - 1
+        last_sector = self.SectorCount - 1
         sleep(1)
         self.ClearBuffer()
         self.Unlock()
-        self.PrepSectorsForWrite(0, kSectorEnd)
-        self.EraseSector(0, kSectorEnd)
+        self.PrepSectorsForWrite(0, last_sector)
+        self.EraseSector(0, last_sector)
         print("Checking Sectors are blank")
-        assert(self.CheckSectorsBlank(0, kSectorEnd))
-
+        assert(self.CheckSectorsBlank(0, last_sector))
