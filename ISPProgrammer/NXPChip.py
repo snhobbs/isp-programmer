@@ -1,10 +1,10 @@
-from . import ISPChip
+import math
+import zlib
 from time import sleep
-from timeout_decorator import TimeoutError, timeout
-import zlib, math
-import typing
 import struct
+from timeout_decorator import timeout
 from pycrc.algorithms import Crc
+from . import ISPChip
 
 NXPReturnCodes = {
     "CMD_SUCCESS"                               : 0x0,
@@ -55,7 +55,7 @@ def RaiseReturnCodeError(code : int, call_name : str) -> None:
 
 def RemoveBootableCheckSum(vector_table_loc, image):
     kuint32_t_size = 4
-    MakeBootable(vector_table_loc, orig_image)
+    MakeBootable(vector_table_loc, image)
     for byte in range(kuint32_t_size):
         image[vector_table_loc * kuint32_t_size + byte] = 0
 
@@ -128,8 +128,8 @@ class NXPChip(ISPChip):
         self.CrystalFrequency = 12000#khz == 30MHz
         self.SectorCount = 0
         self.RAMSize = 0
-        self.RAMRange = 0
-        self.FlashRange = 0
+        self.RAMRange = [0, 0]
+        self.FlashRange = [0, 0]
         self.RAMStartWrite = 0
         self.kCheckSumLocation = 7 #0x0000001c
 
@@ -242,14 +242,14 @@ class NXPChip(ISPChip):
         assert(len(data) == num_bytes)
         return bytes(data)
 
-    def PrepSectorsForWrite(self, StartSector : int, EndSector : int):
+    def PrepSectorsForWrite(self, StartSector: int, EndSector: int):
         try:
             response_code = self.WriteCommand("P %d %d"%(StartSector, EndSector))
         except:
             response_code = self.WriteCommand("P %d %d"%(StartSector, EndSector))
         RaiseReturnCodeError(response_code, "Prep Sectors")
 
-    def CopyRAMToFlash(self, FlashAddress : int, RAMAddress : int, num_bytes : int):
+    def CopyRAMToFlash(self, FlashAddress: int, RAMAddress: int, num_bytes : int):
         assert(RAMAddress+num_bytes < self.RAMRange[1] and RAMAddress >= self.RAMRange[0])
         assert(FlashAddress + num_bytes < self.FlashRange[1] and FlashAddress >= self.FlashRange[0])
 
@@ -260,7 +260,7 @@ class NXPChip(ISPChip):
         RaiseReturnCodeError(response_code, "Copy RAM To Flash")
         #sleep(.2)
 
-    def Go(self, Address : bool, ThumbMode : bool = False):
+    def Go(self, Address: bool, ThumbMode: bool = False):
         '''
         Start executing code at the specified spot
         '''
@@ -270,15 +270,15 @@ class NXPChip(ISPChip):
         response_code = self.WriteCommand("G %d %s"%(Address, mode))
         RaiseReturnCodeError(response_code, "Go")
 
-    def EraseSector(self, StartSector : int, EndSector : int):
+    def EraseSector(self, StartSector: int, EndSector: int):
         response_code = self.WriteCommand("E %d %d"%(StartSector, EndSector))
         RaiseReturnCodeError(response_code, "Erase Sectors")
 
-    def ErasePages(self, StartPage : int, ErasePage : int):
+    def ErasePages(self, StartPage: int, EndPage: int):
         response_code = self.WriteCommand("X %d %d"%(StartPage, EndPage))
         RaiseReturnCodeError(response_code, "Erase Pages")
 
-    def CheckSectorsBlank(self, StartSector : int, EndSector : int) -> bool:
+    def CheckSectorsBlank(self, StartSector: int, EndSector: int) -> bool:
         assert(StartSector <= EndSector)
         response_code = self.WriteCommand("I %d %d"%(StartSector, EndSector) + self.kNewLine)
         try:
@@ -444,7 +444,7 @@ class NXPChip(ISPChip):
             except TimeoutError:
                 pass
 
-    def SetCrystalFrequency(self, frequency_khz : int):
+    def SetCrystalFrequency(self, frequency_khz: int):
         self.Write("%d"%frequency_khz + self.kNewLine)
         verified = False
         for i in range(3):
@@ -459,7 +459,7 @@ class NXPChip(ISPChip):
             raise UserWarning("Verification Failure")
 
 
-    def CheckFlashWrite(Data, FlashAddress : int):
+    def CheckFlashWrite(self, Data, FlashAddress: int):
         '''
         Read Memory and compare it to what was written
         '''
