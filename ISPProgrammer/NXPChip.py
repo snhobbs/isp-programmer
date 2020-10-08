@@ -3,6 +3,7 @@ import zlib
 from time import sleep
 import struct
 from timeout_decorator import timeout
+from timeout_decorator.timeout_decorator import TimeoutError
 from pycrc.algorithms import Crc
 from .ISPChip import ISPChip
 
@@ -117,7 +118,8 @@ class NXPChip(ISPChip):
     #DataBits = 8
     #StopBits = 1
     SyncString = "Synchronized"+ISPChip.kNewLine
-    SyncVerified = "OK"+ISPChip.kNewLine
+    SyncStringBytes = bytes(SyncString, encoding="utf-8")
+    SyncVerified = bytes("OK"+ISPChip.kNewLine, encoding="utf-8")
     ReturnCodes = NXPReturnCodes
     CRCLocation = 0x000002fc
 
@@ -157,6 +159,7 @@ class NXPChip(ISPChip):
 
     def Write(self, string : bytes) -> None:
         #print(out)
+        assert(type(string) is bytes)
         self.WriteSerial(string)
         #self.WriteSerial(bytes(self.kNewLine, encoding = "utf-8"))
 
@@ -354,14 +357,14 @@ class NXPChip(ISPChip):
 
     def ResetSerialConnection(self):
         self.Flush()
-        self.Write(bytes(self.kNewLine), encoding="utf-8")
+        self.Write(bytes(self.kNewLine, encoding="utf-8"))
         try:
             self.ReadLine()
         except TimeoutError:
             pass
 
     def InitConnection(self):
-        #self.ResetSerialConnection()
+        self.ResetSerialConnection()
         try:
             try:
                 self.SyncConnection()
@@ -392,7 +395,7 @@ class NXPChip(ISPChip):
         self.ClearSerialConnection()
         self.Flush()
         for i in range(5):
-            self.Write('?'*15)
+            self.Write(bytes('?'*15, encoding="utf-8"))
             #self.Write('?' + self.kNewLine)
             try:
                 frame_in = self.ReadLine()
@@ -407,7 +410,7 @@ class NXPChip(ISPChip):
             raise UserWarning("Syncronization Failure")
 
         #self.Flush()
-        self.Write(self.SyncString)#echo SyncString
+        self.Write(self.SyncStringBytes)#echo SyncString
         try:
             frame_in = self.ReadLine()#discard echo
         except TimeoutError:

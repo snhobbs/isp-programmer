@@ -2,7 +2,7 @@ from collections import deque
 from serial import Serial
 from timeout_decorator import timeout
 from typing import List, Deque
-
+kTimeout = 1
 class IODevice:
     def ReadByte(self):
         pass
@@ -38,6 +38,7 @@ class UartDevice(IODevice):
     def ReadAll(self):
         return self.uart.read_all()
     def Write(self, arr: bytes):
+        assert(type(arr) is bytes)
         self.uart.write(arr)
     def Flush(self):
         self.uart.flush()
@@ -48,6 +49,16 @@ class UartDevice(IODevice):
 
 class ISPChip:
     kNewLine = "\r\n"
+    _echo = False
+
+    @classmethod
+    def SetEcho(self, enable):
+        self._echo = enable
+
+    @classmethod
+    def GetEcho(self):
+        return self._echo
+
     def __init__(self, iodevice: IODevice):
         self.iodevice = iodevice
         self.frame : List[int] = list()
@@ -61,12 +72,15 @@ class ISPChip:
         self.iodevice.SetBaudrate(baudrate)
 
     def WriteSerial(self, out: bytes) -> None:
+        assert(type(out) is bytes)
         self.iodevice.Write(out)
+        if self.GetEcho():
+          print("<", out, ">")
 
     def Flush(self):
         self.iodevice.Flush()
 
-    @timeout(0.25)
+    @timeout(kTimeout)
     def ReadLine(self):
         while not self.ReadFrame():
             self.Read()
@@ -86,8 +100,9 @@ class ISPChip:
 
     def Read(self):
         data_in = self.iodevice.ReadAll()
-        #if len(data_in):
-        #    print(data_in.decode("utf-8"))
+        if self.GetEcho():
+          if len(data_in):
+            print("[", data_in, "]")
         self.data_buffer_in.extend(data_in)
 
     def ReadFrame(self):

@@ -14,15 +14,20 @@ BAUDRATES = (
 )
 @click.group()
 @click.option('--device', '-d', default='/dev/ttyUSB0', help='Serial device')
-@click.option('--baud', '-b', type=int, default=9600, help='Baudrate')
+@click.option('--baud', '-b', type=int, default=BAUDRATES[0], help='Baudrate')
 @click.option('--crystal_frequency', '-c', type=int, default=12000,
               help="Crystal frequency of chip in khz")
 @click.option('--config_file', '-f', default='/etc/lpctools_parts.def',
               help='Parts definition file')
+@click.option('--echo', is_flag=True)
 @click.pass_context
 def gr1(ctx, **kwargs):
     ctx.ensure_object(dict)
     ctx.obj.update(kwargs)
+    ISPProgrammer.ISPChip.SetEcho(kwargs['echo'])
+
+    if ISPProgrammer.ISPChip.GetEcho():
+      print("Echoing received data with [...], and sent as <...>")
 
 def ReadChipFile(fname: str) -> list:
     data = []
