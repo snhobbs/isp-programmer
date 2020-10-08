@@ -354,7 +354,7 @@ class NXPChip(ISPChip):
 
     def ResetSerialConnection(self):
         self.Flush()
-        self.Write(self.kNewLine)
+        self.Write(bytes(self.kNewLine), encoding="utf-8")
         try:
             self.ReadLine()
         except TimeoutError:
@@ -427,7 +427,7 @@ class NXPChip(ISPChip):
         print("Syncronization Successful")
 
     def ClearSerialConnection(self):
-        self.Write(self.kNewLine)
+        self.Write(bytes(self.kNewLine, encoding="utf-8"))
         self.ClearBuffer()
         self.Flush()
         self.Read()
