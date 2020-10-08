@@ -42,7 +42,7 @@ def GetPartDescriptor(fname: str, partid: int) -> str:
 
 def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str) -> ISPProgrammer.NXPChip:
     #print(baudrate, device, crystal_frequency, chip_file)
-    kStartingBaudRate = 9600
+    kStartingBaudRate = BAUDRATES[0]
     iodevice = ISPProgrammer.UartDevice(device, baudrate=kStartingBaudRate)
     chip = ISPProgrammer.NXPChip(iodevice)
     chip.InitConnection()
