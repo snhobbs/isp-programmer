@@ -20,6 +20,8 @@ BAUDRATES = (
 @click.option('--config_file', '-f', default='/etc/lpctools_parts.def',
               help='Parts definition file')
 @click.option('--echo', is_flag=True)
+@click.option('--no_sync', is_flag=True)
+@click.option('--sleep_time', '-s', type=float, default=0.25, help='Sleep time between commands')
 @click.pass_context
 def gr1(ctx, **kwargs):
     ctx.ensure_object(dict)
@@ -45,12 +47,29 @@ def GetPartDescriptor(fname: str, partid: int) -> str:
             return entry
     raise UserWarning("PartId {0x%x} not found in {}".format(partid, fname))
 
-def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str) -> ISPProgrammer.NXPChip:
-    #print(baudrate, device, crystal_frequency, chip_file)
-    kStartingBaudRate = BAUDRATES[0]
+def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1) -> ISPProgrammer.NXPChip:
+    #print(baudrate, device, crystal_frequency, chip_file) 
+    if(not no_sync):
+        kStartingBaudRate = BAUDRATES[0]
+    else:
+        kStartingBaudRate = baudrate
+
     iodevice = ISPProgrammer.UartDevice(device, baudrate=kStartingBaudRate)
     chip = ISPProgrammer.NXPChip(iodevice)
-    chip.InitConnection()
+    chip.kSleepTime = sleep_time
+    if(not no_sync):
+        chip.InitConnection()
+
+    chip.Echo(False)
+    '''
+    try:
+        chip.ReadLine()
+        chip.Flush()
+        chip.ClearBuffer()
+    except TimeoutError:
+        pass
+    '''
+
     while True:
         try:
             part_id = chip.ReadPartID()
@@ -86,29 +105,46 @@ def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str
 @gr1.command()
 @click.pass_context
 def QueryChip(ctx):
-    SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
+    SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
 
 @gr1.command()
 @click.pass_context
 def MassErase(ctx):
-    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
+    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
     chip.MassErase()
     print("Mass Erase Successful")
+
+@click.option('--start_sector', type=int, default=0, required=True, help='Sector to write to')
+@click.option('--imagein', type=str, required=True, help='Location of hex file to program')
+@gr1.command()
+@click.pass_context
+def WriteFlash(ctx, imagein, start_sector):
+    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    try:
+        chip.WriteBinaryToFlash(imagein, start_sector)
+    except UserWarning as e:
+        print(e)
+        chip.WriteBinaryToFlash(imagein, start_sector)
 
 @click.option('--imagein', type=str, required=True, help='Location of hex file to program')
 @gr1.command()
 @click.pass_context
 def WriteImage(ctx, imagein):
-    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
-    chip.WriteImage(imagein)
+    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    try:
+        chip.WriteImage(imagein)
+    except UserWarning as e:
+        print(e)
+        chip.WriteImage(imagein)
+
     #chip.Go(0, ThumbMode=False)
-    chip.Go(0, ThumbMode=True)
+    chip.Go(0)
 
 @click.option('--imageout', type=str, required=True, help='Name of hex file output')
 @gr1.command()
 @click.pass_context
 def ReadImage(ctx, imageout: str):
-    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'])
+    chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
     chip.ReadImage(imageout)
 
 if __name__ == "__main__":

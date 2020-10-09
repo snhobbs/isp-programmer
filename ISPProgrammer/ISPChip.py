@@ -69,6 +69,7 @@ class ISPChip:
         return self.iodevice.GetBaudrate()
 
     def ChangeBaudRate(self, baudrate: int):
+        self.SetBaudRate(baudrate)
         self.iodevice.SetBaudrate(baudrate)
 
     def WriteSerial(self, out: bytes) -> None:

@@ -129,6 +129,7 @@ class NXPChip(ISPChip):
         "CRP2" : 0x87654321,
         "CRP3" : 0x43218765,
     }
+    kSleepTime = 1
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -139,6 +140,19 @@ class NXPChip(ISPChip):
         self.FlashRange = [0, 0]
         self.RAMStartWrite = 0
         self.kCheckSumLocation = 7 #0x0000001c
+
+    def FlashAddressLegal(self, address):
+        return address >= self.FlashRange[0] and address <= self.FlashRange[1];
+
+    def FlashRangeLegal(self, address, length):
+        print(self.FlashRange, address, length)
+        return self.FlashAddressLegal(address) and self.FlashAddressLegal(address + length - 1) and length <= self.FlashRange[1] - self.FlashRange[0] and address%self.kPageSizeBytes == 0
+
+    def RamAddressLegal(self, address):
+        return address >= self.RAMRange[0] and address <= self.RAMRange[1]
+
+    def RamRangeLegal(self, address, length):
+        return self.RamAddressLegal(address) and self.RamAddressLegal(address + length) and length <= self.RAMRange[1] - self.RAMRange[0] and address%self.kWordSize == 0
 
     def GetReturnCode(self) -> int:
         for _ in range(10):
@@ -198,8 +212,7 @@ class NXPChip(ISPChip):
 
     def WriteToRam(self, start: int, data: bytes):
         assert len(data)%self.kWordSize == 0
-        assert start+len(data) < self.RAMRange[1] and start >= self.RAMRange[0]
-
+        assert self.RamRangeLegal(start, len(data))
         print("Write to RAM %d bytes"%len(data))
         #while i < len(data):
         #    self.Write("W %d %d"%(start + i, kWordSize))
@@ -220,7 +233,7 @@ class NXPChip(ISPChip):
     @timeout(4)
     def ReadMemory(self, start: int, num_bytes: int):
         assert num_bytes%self.kWordSize == 0
-        #assert start+num_bytes < self.RAMRange[1] and start >= self.RAMRange[0]
+        assert self.RamRangeLegal(start, num_bytes)
         print("ReadMemory")
 
         #self.Flush()
@@ -253,11 +266,8 @@ class NXPChip(ISPChip):
         RaiseReturnCodeError(response_code, "Prep Sectors")
 
     def CopyRAMToFlash(self, flash_address: int, ram_address: int, num_bytes: int):
-        assert ram_address+num_bytes < self.RAMRange[1] and ram_address >= self.RAMRange[0]
-        assert flash_address + num_bytes < self.FlashRange[1] and flash_address >= self.FlashRange[0]
-
-        assert flash_address%self.kPageSizeBytes == 0
-        assert ram_address%self.kWordSize == 0
+        assert self.RamRangeLegal(ram_address, num_bytes)
+        assert self.FlashRangeLegal(flash_address, num_bytes)
 
         response_code = self.WriteCommand("C %d %d %d"%(flash_address, ram_address, num_bytes))
         RaiseReturnCodeError(response_code, "Copy RAM To Flash")
@@ -283,7 +293,7 @@ class NXPChip(ISPChip):
 
     def CheckSectorsBlank(self, start: int, end: int) -> bool:
         assert start <= end
-        response_code = self.WriteCommand("I %d %d"%(start, end) + self.kNewLine)
+        response_code = self.WriteCommand("I %d %d"%(start, end))
         try:
             self.ReadLine()
             response = self.ReadLine().strip()
@@ -345,8 +355,7 @@ class NXPChip(ISPChip):
 
     def ReadFlashSig(self, start: int, end: int, wait_states: int = 2, mode: int = 0) -> str:
         assert start < end
-        assert start >= self.FlashRange[0]
-        assert end <= self.FlashRange[1]
+        assert(self.FlashAddressLegal(start) and self.FlashAddressLegal(end))
         response_code = self.WriteCommand("Z %d %d %d %d"%(start, end, wait_states, mode))
         RaiseReturnCodeError(response_code, "Read Flash Signature")
         return self.ReadLine()
@@ -481,57 +490,90 @@ class NXPChip(ISPChip):
         #data += bytes(sector_size_bytes - len(data))
 
         data_crc = zlib.crc32(data, 0)
-        #sleep(.1)
+
         try:
             ram_crc = self.ReadCRC(ram_address, num_bytes=len(data))
         except Exception:
             ram_crc = self.ReadCRC(ram_address, num_bytes=len(data))
         while ram_crc != data_crc:
-            sleep(.01)
+            sleep(self.kSleepTime)
             self.WriteToRam(ram_address, data)
-            sleep(.01)
+            sleep(self.kSleepTime)
             ram_crc = self.ReadCRC(ram_address, num_bytes=len(data))
             if data_crc != ram_crc:
                 print("CRC Check failed", data_crc, ram_crc)
-        assert data_crc == ram_crc
+            else:
+                break
+
+        # Check to see if sector is already equal to RAM, if so skip
+
+        try:
+            self.MemoryLocationsEqual(flash_address, ram_address, sector_size_bytes)
+            print("Flash already equal to RAM, skipping write")
+            return
+        except:
+            pass
+
+        print("Prep Sector")
+        self.PrepSectorsForWrite(sector, sector)
+        sleep(self.kSleepTime)
+        print("Erase Sector")
+        self.EraseSector(sector, sector)
+        sleep(self.kSleepTime)
+        assert self.CheckSectorsBlank(sector, sector)
+        sleep(self.kSleepTime)
 
         print("Prep Sector")
         sector_blank = self.CheckSectorsBlank(sector, sector)
         assert sector_blank
-        sleep(.01)
+        sleep(self.kSleepTime)
         self.PrepSectorsForWrite(sector, sector)
-        sleep(.01)
+        sleep(self.kSleepTime)
         print("Write to Flash")
         self.CopyRAMToFlash(flash_address, ram_address, sector_size_bytes)
-        sleep(.01)
+        sleep(self.kSleepTime)
         flash_crc = self.ReadCRC(flash_address, num_bytes=len(data))
         assert flash_crc == data_crc
         assert self.MemoryLocationsEqual(flash_address, ram_address, sector_size_bytes)
 
     def WriteSector(self, sector: int, data: bytes):
-        assert data
+        #assert data
 
         sector_bytes = self.SectorSizePages*self.kPageSizeBytes
+        assert(len(data) > 0)
         filled_data = FillDataToFitSector(data, sector_bytes)
-        self.PrepSectorsForWrite(sector, sector)
-        sleep(.01)
-        self.EraseSector(sector, sector)
-        sleep(.01)
-        assert self.CheckSectorsBlank(sector, sector)
-        sleep(.01)
 
-        self.PrepSectorsForWrite(sector, sector)
-        sleep(.01)
         self.WriteFlashSector(sector, filled_data)
-        sleep(.01)
+        sleep(self.kSleepTime)
         #assert self.ReadSector(sector) == data_chunk
 
+    def WriteBinaryToFlash(self, image_file: str, start_sector: int):
+        sector_bytes = self.SectorSizePages*self.kPageSizeBytes
+        assert sector_bytes%self.kWordSize == 0
+
+        with open(image_file, 'rb') as f:
+            prog = f.read()
+            image = prog
+            print("Program Length:", len(prog))
+
+            sector_count = int(math.ceil(len(prog)/sector_bytes))
+            assert start_sector + sector_count <= self.SectorCount
+            self.Unlock()
+            for sector in reversed(range(start_sector, start_sector + sector_count)):
+                print("\nWriting Sector %d"%sector)
+                data_chunk = image[(sector-start_sector) * sector_bytes : (sector - start_sector + 1) * sector_bytes]
+                self.WriteSector(sector, data_chunk)
+
+        chip_flash_sig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
+        print("Flash Signature: %s"%chip_flash_sig)
+        print("Programming Complete.")
+
     def WriteImage(self, image_file: str):
-        self.Unlock()
         sector_bytes = self.SectorSizePages*self.kPageSizeBytes
         assert sector_bytes%self.kWordSize == 0
 
         #make not bootable
+        self.Unlock()
         self.WriteSector(0, bytes([0xde]*sector_bytes))
 
         with open(image_file, 'rb') as f:
