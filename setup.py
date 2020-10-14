@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
     LONG_DESCRIPTION = fh.read()
 
 setup(name='ISPProgrammer',
-      version='1.0.2',
+      version='1.0.3',
       description='NXP ISP Cortex-M programming tool',
       long_description=LONG_DESCRIPTION,
       long_description_content_type="text/markdown",
