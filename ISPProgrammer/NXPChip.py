@@ -358,7 +358,10 @@ class NXPChip(ISPChip):
         assert(self.FlashAddressLegal(start) and self.FlashAddressLegal(end))
         response_code = self.WriteCommand("Z %d %d %d %d"%(start, end, wait_states, mode))
         RaiseReturnCodeError(response_code, "Read Flash Signature")
-        return self.ReadLine()
+        sig = []
+        for i in range(4):
+            sig.append(self.ReadLine().strip())
+        return sig
 
     def ReadWriteFAIM(self):
         response_code = self.WriteCommand("O")
@@ -564,6 +567,7 @@ class NXPChip(ISPChip):
                 data_chunk = image[(sector-start_sector) * sector_bytes : (sector - start_sector + 1) * sector_bytes]
                 self.WriteSector(sector, data_chunk)
 
+        sleep(1)
         chip_flash_sig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
         print("Flash Signature: %s"%chip_flash_sig)
         print("Programming Complete.")
