@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+import logging
 import click
-#from timeout_decorator import TimeoutError
-import ISPProgrammer
+import timeout_decorator
+import NXPChip
+import ISPChip
 
 BAUDRATES = (
     9600,
@@ -12,6 +14,8 @@ BAUDRATES = (
     230400,
     460800
 )
+
+
 @click.group()
 @click.option('--device', '-d', default='/dev/ttyUSB0', help='Serial device')
 @click.option('--baud', '-b', type=int, default=BAUDRATES[0], help='Baudrate')
@@ -26,10 +30,11 @@ BAUDRATES = (
 def gr1(ctx, **kwargs):
     ctx.ensure_object(dict)
     ctx.obj.update(kwargs)
-    ISPProgrammer.ISPChip.SetEcho(kwargs['echo'])
+    NXPChip.ISPChip.SetEcho(kwargs['echo'])
 
-    if ISPProgrammer.ISPChip.GetEcho():
-      print("Echoing received data with [...], and sent as <...>")
+    if NXPChip.ISPChip.GetEcho():
+        print("Echoing received data with [...], and sent as <...>")
+
 
 def ReadChipFile(fname: str) -> list:
     data = []
@@ -40,6 +45,7 @@ def ReadChipFile(fname: str) -> list:
             data.append(line.split(","))
     return data
 
+
 def GetPartDescriptor(fname: str, partid: int) -> str:
     entries = ReadChipFile(fname)
     for entry in entries:
@@ -47,15 +53,16 @@ def GetPartDescriptor(fname: str, partid: int) -> str:
             return entry
     raise UserWarning("PartId {0x%x} not found in {}".format(partid, fname))
 
-def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1) -> ISPProgrammer.NXPChip:
+
+def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1) -> NXPChip.NXPChip:
     #print(baudrate, device, crystal_frequency, chip_file) 
     if(not no_sync):
         kStartingBaudRate = BAUDRATES[0]
     else:
         kStartingBaudRate = baudrate
 
-    iodevice = ISPProgrammer.UartDevice(device, baudrate=kStartingBaudRate)
-    chip = ISPProgrammer.NXPChip(iodevice)
+    iodevice = ISPChip.UartDevice(device, baudrate=kStartingBaudRate)
+    chip = NXPChip.NXPChip(iodevice)
     chip.kSleepTime = sleep_time
     if(not no_sync):
         chip.InitConnection()
@@ -70,12 +77,7 @@ def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str
         pass
     '''
 
-    while True:
-        try:
-            part_id = chip.ReadPartID()
-            break
-        except TimeoutError:
-            pass
+    part_id = NXPChip.retry(chip.ReadPartID, count=100, exception=timeout_decorator.TimeoutError)()
     descriptor = GetPartDescriptor(chip_file, part_id)
     if descriptor is None:
         raise UserWarning("Warning chip %s not found in file %s"%(hex(part_id), chip_file))
@@ -102,10 +104,12 @@ def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str
     chip.ChangeBaudRate(baudrate)
     return chip
 
+
 @gr1.command()
 @click.pass_context
 def QueryChip(ctx):
     SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+
 
 @gr1.command()
 @click.pass_context
@@ -114,31 +118,25 @@ def MassErase(ctx):
     chip.MassErase()
     print("Mass Erase Successful")
 
+
 @click.option('--start_sector', type=int, default=0, required=True, help='Sector to write to')
 @click.option('--imagein', type=str, required=True, help='Location of hex file to program')
 @gr1.command()
 @click.pass_context
 def WriteFlash(ctx, imagein, start_sector):
     chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
-    try:
-        chip.WriteBinaryToFlash(imagein, start_sector)
-    except UserWarning as e:
-        print(e)
-        chip.WriteBinaryToFlash(imagein, start_sector)
+    NXPChip.retry(chip.WriteBinaryToFlash, count=2, exception=UserWarning)(imagein, start_sector)
+
 
 @click.option('--imagein', type=str, required=True, help='Location of hex file to program')
 @gr1.command()
 @click.pass_context
 def WriteImage(ctx, imagein):
     chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
-    try:
-        chip.WriteImage(imagein)
-    except UserWarning as e:
-        print(e)
-        chip.WriteImage(imagein)
-
+    NXPChip.retry(chip.WriteImage, count=2, exception=UserWarning)(imagein)
     #chip.Go(0, ThumbMode=False)
     chip.Go(0)
+
 
 @click.option('--imageout', type=str, required=True, help='Name of hex file output')
 @gr1.command()
@@ -147,5 +145,8 @@ def ReadImage(ctx, imageout: str):
     chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
     chip.ReadImage(imageout)
 
+
 if __name__ == "__main__":
+    logging.basicConfig()
+    logging.getLogger().setLevel(logging.DEBUG)
     gr1()
