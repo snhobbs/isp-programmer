@@ -7,23 +7,25 @@ from typing import List, Deque
 from collections import deque
 from timeout_decorator import timeout, timeout_decorator
 from pycrc.algorithms import Crc
-from ISPChip import IODevice
 import functools
-
+try:
+    from ISPChip import IODevice
+except ImportError:
+    from . import IODevice
 kTimeout = 1
 
-def retry(_func=None, *, count=2, exception=timeout_decorator.TimeoutError):
+def retry(_func=None, *, count=2, exception=timeout_decorator.TimeoutError, raise_on_fail=True):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             value = None
-            for i in range(count):    
+            for i in range(1, count+1):    
                 try:
                     value = func(*args, **kwargs)
                     break
                 except exception as e:
                     logging.warning(f"{e}: Retry {i}/{count}")
-                    if i >= count:
+                    if i >= count and raise_on_fail:
                         raise UserWarning(f"{_func} retry exceeded {count}")
             return value
         return wrapper
@@ -602,7 +604,7 @@ class NXPChip(ISPChip):
         self.Read()
         self.ClearBuffer()
         self.Flush()
-        retry(self.ReadLine, count=2, exception=timeout_decorator.TimeoutError)()
+        retry(self.ReadLine, count=2, exception=timeout_decorator.TimeoutError, raise_on_fail=False)()
 
     def SetCrystalFrequency(self, frequency_khz: int):
         self.Write((bytes("%d"%frequency_khz + self.kNewLine, encoding="utf-8")))

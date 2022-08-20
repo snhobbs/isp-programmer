@@ -2,8 +2,12 @@
 import logging
 import click
 import timeout_decorator
-import NXPChip
-import ISPChip
+try:
+    import NXPChip, ISPChip
+    from NXPChip import retry, NXPChip, ISPChip
+    from ISPChip import UartDevice
+except ImportError:
+    from ISPProgrammer import NXPChip, IODevice, ISPChip, retry, UartDevice
 
 BAUDRATES = (
     9600,
@@ -30,9 +34,9 @@ BAUDRATES = (
 def gr1(ctx, **kwargs):
     ctx.ensure_object(dict)
     ctx.obj.update(kwargs)
-    NXPChip.ISPChip.SetEcho(kwargs['echo'])
+    ISPChip.SetEcho(kwargs['echo'])
 
-    if NXPChip.ISPChip.GetEcho():
+    if ISPChip.GetEcho():
         print("Echoing received data with [...], and sent as <...>")
 
 
@@ -54,15 +58,15 @@ def GetPartDescriptor(fname: str, partid: int) -> str:
     raise UserWarning("PartId {0x%x} not found in {}".format(partid, fname))
 
 
-def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1) -> NXPChip.NXPChip:
+def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1) -> NXPChip:
     #print(baudrate, device, crystal_frequency, chip_file) 
     if(not no_sync):
         kStartingBaudRate = BAUDRATES[0]
     else:
         kStartingBaudRate = baudrate
 
-    iodevice = ISPChip.UartDevice(device, baudrate=kStartingBaudRate)
-    chip = NXPChip.NXPChip(iodevice)
+    iodevice = UartDevice(device, baudrate=kStartingBaudRate)
+    chip = NXPChip(iodevice)
     chip.kSleepTime = sleep_time
     if(not no_sync):
         chip.InitConnection()
@@ -77,7 +81,7 @@ def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str
         pass
     '''
 
-    part_id = NXPChip.retry(chip.ReadPartID, count=100, exception=timeout_decorator.TimeoutError)()
+    part_id = retry(chip.ReadPartID, count=100, exception=timeout_decorator.TimeoutError)()
     descriptor = GetPartDescriptor(chip_file, part_id)
     if descriptor is None:
         raise UserWarning("Warning chip %s not found in file %s"%(hex(part_id), chip_file))
@@ -125,7 +129,7 @@ def MassErase(ctx):
 @click.pass_context
 def WriteFlash(ctx, imagein, start_sector):
     chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
-    NXPChip.retry(chip.WriteBinaryToFlash, count=2, exception=UserWarning)(imagein, start_sector)
+    retry(chip.WriteBinaryToFlash, count=2, exception=UserWarning)(imagein, start_sector)
 
 
 @click.option('--imagein', type=str, required=True, help='Location of hex file to program')
@@ -133,7 +137,7 @@ def WriteFlash(ctx, imagein, start_sector):
 @click.pass_context
 def WriteImage(ctx, imagein):
     chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
-    NXPChip.retry(chip.WriteImage, count=2, exception=UserWarning)(imagein)
+    retry(chip.WriteImage, count=3, exception=UserWarning)(imagein)
     #chip.Go(0, ThumbMode=False)
     chip.Go(0)
 
