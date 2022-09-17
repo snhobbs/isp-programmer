@@ -23,7 +23,7 @@ def retry(_func=None, *, count=2, exception=timeout_decorator.TimeoutError, rais
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             value = None
-            for i in range(1, count+1):    
+            for i in range(1, count+1):
                 try:
                     assert func
                     value = func(*args, **kwargs)
@@ -36,7 +36,7 @@ def retry(_func=None, *, count=2, exception=timeout_decorator.TimeoutError, rais
         return wrapper
     if _func is None:
         return decorator
-    return decorator(_func) 
+    return decorator(_func)
 
 BAUDRATES = (
     9600,
@@ -290,7 +290,7 @@ class NXPChip(ISPChip):
     # SyncVerifiedBytes = bytes(SyncVerifiedString, encoding="utf-8")
     ReturnCodes = NXPReturnCodes
     CRCLocation = 0x000002fc
-    
+
     _crc_sleep = 0.1
 
     CRCValues = {
@@ -483,7 +483,7 @@ class NXPChip(ISPChip):
         try:
             self.ReadLine()  #  throw away echo ?
             response = self.ReadLine()
-            logging.info("Check Sectors Blank response", response)
+            logging.info(f"Check Sectors Blank response: {response}")
         except timeout_decorator.TimeoutError:
             pass
 
@@ -497,14 +497,14 @@ class NXPChip(ISPChip):
         '''
         response_code = self.WriteCommand("J")
         RaiseReturnCodeError(response_code, "Read Part ID")
-        
+
         resp = retry(self.ReadLine, count=1, exception=timeout_decorator.TimeoutError, raise_on_fail=False)()
         try:
             return int(resp) # handle none type passed
         except ValueError:
             pass
         return resp
-    
+
     def ReadBootCodeVersion(self):
         '''
         LPC84x sends a 0x1a first for some reason.
@@ -617,7 +617,7 @@ class LPC_TypeAChip(NXPChip):
         2. Receive "Synchronized"
         3. Return "Synchronized"
         4. Recieve "OK"
-        
+
         If the chip is started from reset this will work.
         If too many characters that are not a ? are received then the chip will need to be
         reset. If a couple garbage characters are picked then the chip will still sychronize if the
@@ -712,7 +712,7 @@ class LPC_TypeAChip(NXPChip):
         3. Erase sector
         4. Prep sector again
         5. Copy RAM to flash
-        
+
         To make this more robust we check that each step has completed successfully.
         After writing RAM check that the CRC matches the data in.
         After writing the Flash repeat the test
@@ -746,7 +746,7 @@ class LPC_TypeAChip(NXPChip):
         if ram_equal:
             logging.info("Flash already equal to RAM, skipping write")
             return
-     
+
         logging.info("Prep Sector")
         self.PrepSectorsForWrite(sector, sector)
         logging.info("Erase Sector")
@@ -779,7 +779,7 @@ class LPC_TypeAChip(NXPChip):
         On completion return the flash signature which cna be stored for validity checking
         '''
         assert isinstance(image, bytes)
-        logging.info("Program Length:", len(image))
+        logging.info("Program Length: %d", len(image))
 
         sector_count = self.calc_sector_count(image)
         assert start_sector + sector_count <= self.SectorCount
@@ -793,13 +793,13 @@ class LPC_TypeAChip(NXPChip):
         logging.info(f"Flash Signature: {chip_flash_sig}")
         logging.info("Programming Complete.")
         return chip_flash_sig
-    
+
     def WriteImage(self, image_file: str):
         '''
         1. Overwrite first sector which clears the checksum bytes making the image unbootable, preventing bricking
         2. Read the binary file into memory as a bytes object
         3. Write the checksum to the image
-        4. Write the image in reverse order, the checksum will only be written once the entire valid image is written 
+        4. Write the image in reverse order, the checksum will only be written once the entire valid image is written
         '''
         #make not bootable
         self.Unlock()
@@ -827,7 +827,7 @@ class LPC_TypeAChip(NXPChip):
         image = bytes()
         blank_sector = self.FindFirstBlankSector()
         for sector in range(blank_sector):
-            logging.info("Sector ", sector)
+            logging.info("Sector %d", sector)
             image.join(self.ReadSector(sector))
         return image
 
