@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+import logging
+import click
+import timeout_decorator
+from isp_programmer import tools, UartDevice, GetPartDescriptor, BAUDRATES, ChipDescription, ISPConnection
+import isp_programmer
+from intelhex import IntelHex
+#MassErase, InitConnection, ReadImage, WriteBinaryToFlash, , ReadSector, 
+
+retry = tools.retry
+calc_crc = tools.calc_crc
+
+
+def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1):
+    if(not no_sync):
+        kStartingBaudRate = BAUDRATES[0]
+    else:
+        kStartingBaudRate = baudrate
+
+    iodevice = UartDevice(device, baudrate=kStartingBaudRate)
+    isp = ISPConnection(iodevice)
+    # print(baudrate, device, crystal_frequency, chip_file)
+
+    if not no_sync:
+        isp.SyncConnection()
+
+    isp.SetBaudRate(baudrate)
+    part_id = isp.ReadPartID()
+
+    descriptor = GetPartDescriptor(chip_file, part_id)
+    logging.info(f"{part_id}, {descriptor}")
+    chip = ChipDescription(descriptor)
+    chip.CrystalFrequency = crystal_frequency#12000#khz == 30MHz
+
+    print("Setting new baudrate %d"%baudrate)
+    isp.SetBaudRate(baudrate)  # set the chips baudrate
+    isp.baud_rate = baudrate  # change the driver baudrate
+    return isp, chip
+
+
+def read_image(image_file: str):
+    extension = image_file.strip().split(".")[-1].lower()
+    ih = IntelHex()
+    ih.fromfile(image_file, format=extension)
+    return ih.tobinarray()
+
+
+@click.group()
+@click.option('--device', '-d', default='/dev/ttyUSB0', help='Serial device')
+@click.option('--baud', '-b', type=int, default=BAUDRATES[0], help='Baudrate')
+@click.option('--crystal-frequency', '-c', type=int, default=12000,
+              help="Crystal frequency of chip in khz")
+@click.option('--config-file', '-f', default='/etc/lpctools_parts.def',
+              help='Parts definition file')
+@click.option('--echo', is_flag=True)
+@click.option('--no-sync', is_flag=True)
+@click.option('--sleep-time', '-s', type=float, default=0.25, help='Sleep time between commands')
+@click.option('--debug', is_flag=True)
+@click.pass_context
+def gr1(ctx, **kwargs):
+    ctx.ensure_object(dict)
+    ctx.obj.update(kwargs)
+    logging.basicConfig()
+
+    if kwargs["debug"]:
+        logging.getLogger().setLevel(logging.DEBUG)
+    else:
+        logging.getLogger().setLevel(logging.INFO)
+
+
+@gr1.command()
+@click.pass_context
+def QueryChip(ctx):
+    iodevice = UartDevice(ctx.obj['device'], baudrate=ctx.obj['baud'])
+    isp = ISPConnection(iodevice)
+    logging.info("Part UID: %s\nBoot Code Version: %s", isp.ReadUID(), isp.ReadBootCodeVersion())
+
+
+@gr1.command()
+@click.pass_context
+def MassErase(ctx):
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    isp_programmer.MassErase(isp, chip)
+    logging.info("Mass Erase Successful")
+
+
+@click.option('--start_sector', type=int, default=0, required=True, help='Sector to write to')
+@click.option('--imagein', type=str, required=True, help='Location of hex file to program')
+@gr1.command()
+@click.pass_context
+def WriteFlash(ctx, imagein, start_sector):
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    image = read_image(imagein)
+    isp_programmer.WriteBinaryToFlash(isp=isp, chip=chip, image=image, start_sector=start_sector)
+
+
+@click.option('--imagein', type=str, required=True, help='Location of hex file to program')
+@gr1.command()
+@click.pass_context
+def WriteImage(ctx, imagein):
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    image = read_image(imagein)
+    isp_programmer.WriteImage(isp, chip, image)
+    isp.Go(0)
+
+
+@click.option('--imageout', type=str, required=True, help='Name of hex file output')
+@gr1.command()
+@click.pass_context
+def ReadImage(ctx, imageout: str):
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    isp_programmer.ReadImage(isp, chip, imageout)
+
+
+if __name__ == "__main__":
+    gr1()
