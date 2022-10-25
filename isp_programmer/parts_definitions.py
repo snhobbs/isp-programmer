@@ -46,9 +46,8 @@ def read_lpcparts_string(string: str):
         if not line.strip() or line.strip()[0] == '#':
             continue
         split_line = line.strip().split(',')
-        for column in lpc_tools_column_locations:
-            value = split_line[lpc_tools_column_locations[column]]
-            value = value.strip()
+        for column, index in lpc_tools_column_locations.items():
+            value = split_line[index].strip()
             try:
                 value = int(value, 0)
             except ValueError:

@@ -23,6 +23,9 @@ class IODevice:
     def GetBaudrate(self):
         pass
 
+    def ReadLine(self):
+        pass
+
 
 class MockUart(IODevice):
     '''Mock IO device for testing'''
@@ -66,3 +69,7 @@ class UartDevice(IODevice):
 
     def GetBaudrate(self) -> int:
         return self.uart.baudrate
+
+    def ReadLine(self):
+        return bytes(self.uart.readline()).decode("utf-8")
+
