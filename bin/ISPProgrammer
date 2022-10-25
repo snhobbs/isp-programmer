@@ -29,7 +29,7 @@ def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str
     descriptor = GetPartDescriptor(chip_file, part_id)
 
     logging.info(f"{part_id}, {descriptor}")
-    
+
     chip.CrystalFrequency = crystal_frequency#12000#khz == 30MHz
     chip.SectorCount = descriptor["SectorCount"]
     chip.RAMSize = descriptor["RAMSize"]

@@ -49,9 +49,9 @@ class UartDevice(IODevice):
         self.uart = Serial(port, baudrate, xonxoff=False)
 
     def ReadByte(self):
-        return self.uart.read_all()
+        return self.uart.read()
 
-    def ReadAll(self):
+    def ReadAll(self) -> bytes:
         return self.uart.read_all()
 
     def Write(self, arr: bytes):
@@ -64,5 +64,5 @@ class UartDevice(IODevice):
     def SetBaudrate(self, baudrate: int) -> None:
         self.uart.baudrate = baudrate
 
-    def GetBaudrate(self):
+    def GetBaudrate(self) -> int:
         return self.uart.baudrate

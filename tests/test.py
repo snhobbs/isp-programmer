@@ -1,15 +1,17 @@
 import logging
-import timeout_decorator
 from time import sleep
+import timeout_decorator
 try:
     from IODevices import UartDevice
-    from nxp import retry, LPC_TypeAChip, retry, BAUDRATES, FillDataToFitSector, calc_crc
+    from nxp import retry, LPC_TypeAChip, retry, FillDataToFitSector, calc_crc
     from parts_definitions import GetPartDescriptor
-except ImportError as e:
-    from ISPProgrammer import LPC_TypeAChip, retry, UartDevice, GetPartDescriptor, BAUDRATES, FillDataToFitSector
+except (ImportError, ModuleNotFoundError) as e:
+    print(e)
+    from ISPProgrammer import LPC_TypeAChip, retry, UartDevice, GetPartDescriptor, FillDataToFitSector, calc_crc
+
 
 def SetupChip(baudrate: int, crystal_frequency: int, chip_file: str, sleep_time : float = 1) -> LPC_TypeAChip:
-    #print(baudrate, device, crystal_frequency, chip_file) 
+    #print(baudrate, device, crystal_frequency, chip_file)
     kStartingBaudRate = baudrate
 
     device = "/dev/ttyUSB0"
@@ -20,7 +22,7 @@ def SetupChip(baudrate: int, crystal_frequency: int, chip_file: str, sleep_time 
 
     chip.Echo(False)
     part_id = retry(chip.ReadPartID, count=100, exception=timeout_decorator.TimeoutError)()
-    
+
     descriptor = GetPartDescriptor(chip_file, part_id)
     logging.info(f"{part_id}, {descriptor}")
     chip.CrystalFrequency = crystal_frequency#12000#khz == 30MHz
@@ -31,8 +33,6 @@ def SetupChip(baudrate: int, crystal_frequency: int, chip_file: str, sleep_time 
     chip.RAMStartWrite = descriptor["RAMStartWrite"]
     chip.kCheckSumLocation = 7 #0x0000001c
 
-    if(chip.RAMRange[1]-chip.RAMRange[0] != chip.RAMSize - 1):
-        raise ValueError(f"RAM size for {part_id: 0x%x} is wrong")
     print("Setting new baudrate %d"%baudrate)
     chip.ChangeBaudRate(baudrate)
     return chip
@@ -55,20 +55,19 @@ def main():
         expected_data = bytes([0xff]*chip.sector_bytes)
         crc_expected = calc_crc(expected_data)
 
-        if True:
-            # Read first sector
-            chip.WriteToRam(chip.RAMStartWrite, expected_data)
-            sleep(1)
-            chip.ResetSerialConnection()
-            first_sector = retry(chip.ReadMemory, count=2, exception=(UserWarning, timeout_decorator.TimeoutError))(chip.RAMStartWrite, chip.sector_bytes)
-            # first_sector = chip.ReadSector(0)
-            assert first_sector == expected_data
-            # crc_calculated = chip.ReadCRC(chip.FlashRange[0], chip.sector_bytes)
-            crc_read = chip.ReadCRC(0, chip.sector_bytes)
-            crc_calculated = calc_crc(first_sector)
-            assert crc_read == crc_expected
-            assert crc_expected == crc_calculated
-            logging.info("RAM CRC check passed")
+        # Read first sector
+        chip.WriteToRam(chip.RAMStartWrite, expected_data)
+        sleep(1)
+        chip.ResetSerialConnection()
+        first_sector = retry(chip.ReadMemory, count=2, exception=(UserWarning, timeout_decorator.TimeoutError))(chip.RAMStartWrite, chip.sector_bytes)
+        # first_sector = chip.ReadSector(0)
+        assert first_sector == expected_data
+        # crc_calculated = chip.ReadCRC(chip.FlashRange[0], chip.sector_bytes)
+        crc_read = chip.ReadCRC(0, chip.sector_bytes)
+        crc_calculated = calc_crc(first_sector)
+        assert crc_read == crc_expected
+        assert crc_expected == crc_calculated
+        logging.info("RAM CRC check passed")
 
         if False:
             data = FillDataToFitSector(b"hello world", chip.sector_bytes)

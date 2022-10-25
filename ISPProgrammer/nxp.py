@@ -11,9 +11,11 @@ from pycrc.algorithms import Crc
 import functools
 try:
     from IODevices import IODevice
+    import tools
 except ImportError:
     try:
         from . import IODevice
+        from . import tools
     except ImportError:
         pass
 kTimeout = 1
@@ -104,6 +106,24 @@ def RaiseReturnCodeError(code: int, call_name: str) -> None:
             f"Return Code Failure in {call_name} {GetErrorCodeName(code)} {code}")
 
 
+def Crc32(frame: bytes) -> int:
+    #CRC32
+    polynomial = 0x104c11db6
+    crc = Crc(width=32, poly=polynomial, reflect_in=True,
+              xor_in=(1<<32)-1, reflect_out=True, xor_out=0x00)
+    crc_calc = crc.bit_by_bit(frame)
+    return crc_calc
+
+
+def calc_crc(frame: bytes):
+    return zlib.crc32(frame, 0)
+    #return Crc32(frame)
+
+
+###############################################################
+# Check Sum
+###############################################################
+
 def RemoveBootableCheckSum(vector_table_loc: int, image: bytes) -> bytes:
     '''
     Erases only the checksum, making the image invalid. The chip will reset into the ISP now.
@@ -123,18 +143,6 @@ def CalculateCheckSum(frame) -> int:
         csum += entry
     return (1<<32) - (csum % (1<<32))
 
-
-def Crc32(frame: bytes) -> int:
-    #CRC32
-    polynomial = 0x104c11db6
-    crc = Crc(width=32, poly=polynomial, reflect_in=True,
-              xor_in=(1<<32)-1, reflect_out=True, xor_out=0x00)
-    crc_calc = crc.bit_by_bit(frame)
-    return crc_calc
-
-def calc_crc(frame: bytes):
-    return zlib.crc32(frame, 0)
-    #return Crc32(frame)
 
 def GetCheckSumedVectorTable(vector_table_loc: int, orig_image: bytes) -> bytes:
     # make this a valid image by inserting a checksum in the correct place
@@ -163,13 +171,11 @@ def MakeBootable(vector_table_loc: int, orig_image: bytes) -> bytes:
     return image
 
 
+
 def FillDataToFitSector(data: bytes, size: int) -> bytes:
     if len(data) != size:
         data += bytes([0xff] *(size - len(data)))
     return data
-
-def collection_to_string(arr):
-    return "".join([chr(ch) for ch in arr])
 
 class ISPChip:
     '''Generic ISP chip'''
@@ -220,7 +226,7 @@ class ISPChip:
         cnt = 0
         while not self.ReadFrame():
             self.Read()
-        line = collection_to_string(self.frame).strip()
+        line = tools.collection_to_string(self.frame).strip()
         logging.debug(f"ReadLine: [{line}]")
         self.frame.clear()
         assert isinstance(line, str)
@@ -383,10 +389,7 @@ class NXPChip(ISPChip):
         '''
         ISP echos host when enabled
         '''
-        if on:
-            command = "A 1"
-        else:
-            command = "A 0"
+        command = f"A {on : d}"
         response_code = self.WriteCommand(command)
         RaiseReturnCodeError(response_code, "Set Echo")
 
@@ -634,7 +637,7 @@ class LPC_TypeAChip(NXPChip):
             try:
                 frame_in = self.ReadLine()
             except timeout_decorator.TimeoutError:
-                frame_in = collection_to_string(self.get_data_buffer_contents())
+                frame_in = tools.collection_to_string(self.get_data_buffer_contents())
 
             logging.debug(f"{frame_in}, {self.SyncString.strip()}, {self.SyncString.strip()==frame_in}")
             if self.SyncString.strip() in frame_in:
@@ -789,7 +792,13 @@ class LPC_TypeAChip(NXPChip):
             data_chunk = image[(sector-start_sector) * self.sector_bytes : (sector - start_sector + 1) * self.sector_bytes]
             self.WriteSector(sector, data_chunk)
 
-        chip_flash_sig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
+        for i in range(3):
+            try:
+                chip_flash_sig = self.ReadFlashSig(self.FlashRange[0], self.FlashRange[1])
+                break
+            except UserWarning:
+                continue
+
         logging.info(f"Flash Signature: {chip_flash_sig}")
         logging.info("Programming Complete.")
         return chip_flash_sig
