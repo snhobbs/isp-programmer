@@ -1,0 +1,6 @@
+intelhex
+click
+pyserial
+numpy
+timeout_decorator
+pandas
