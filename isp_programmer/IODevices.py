@@ -72,4 +72,3 @@ class UartDevice(IODevice):
 
     def ReadLine(self):
         return bytes(self.uart.readline()).decode("utf-8")
-

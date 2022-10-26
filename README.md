@@ -14,6 +14,7 @@ keep the device in ISP mode instead of just being bricked.
 
 ## Chip Families Supported:
     LPC84x
+    LPC82x
     LPC80x
 
     UU encoded families not supported (LPC1700 family and similar)

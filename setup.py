@@ -4,8 +4,8 @@ from setuptools import setup, find_packages
 with open("README.md", "r") as fh:
     LONG_DESCRIPTION = fh.read()
 
-setup(name='isp_programmer',
-      version='1.0.4',
+setup(name='ISPProgrammer',
+      version='1.1.0',
       description='NXP ISP Cortex-M programming tool',
       long_description=LONG_DESCRIPTION,
       long_description_content_type="text/markdown",

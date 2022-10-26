@@ -4,7 +4,6 @@ from pycrc.algorithms import Crc
 import functools
 import zlib
 import timeout_decorator
-from timeout_decorator import timeout
 
 def collection_to_string(arr):
     return "".join([chr(ch) for ch in arr])

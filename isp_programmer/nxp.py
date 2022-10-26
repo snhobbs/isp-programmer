@@ -3,7 +3,7 @@ from time import sleep
 import struct
 import timeout_decorator
 from . import ISPConnection
-from .tools import calc_crc, retry
+from .tools import calc_crc
 from . import tools
 kTimeout = 1
 
