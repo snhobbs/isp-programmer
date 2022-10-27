@@ -71,4 +71,8 @@ class UartDevice(IODevice):
         return self.uart.baudrate
 
     def ReadLine(self):
-        return bytes(self.uart.readline()).decode("utf-8")
+        line = self.uart.readline()
+        try:
+            return bytes(line).decode("utf-8")
+        except UnicodeDecodeError:
+            raise TimeoutError

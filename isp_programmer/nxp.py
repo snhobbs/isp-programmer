@@ -142,8 +142,8 @@ def WriteFlashSector(isp: ISPConnection, chip: ChipDescription, sector: int, dat
     After writing RAM check that the CRC matches the data in.
     After writing the Flash repeat the test
     '''
-    flash_write_sleep = 0.05
-    ram_write_sleep = 0#0.1
+    flash_write_sleep = 0.1
+    ram_write_sleep = 0.1
     ram_address = chip.RAMStartWrite
     flash_address = chip.FlashRange[0] + sector*chip.sector_bytes
     logging.info("\nWriting Sector: %d\tFlash Address: %x\tRAM Address: %x", sector, flash_address, ram_address)

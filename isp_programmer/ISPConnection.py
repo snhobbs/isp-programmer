@@ -161,8 +161,10 @@ class ISPConnection:
             resp = self._read_line()
             if self.echo_on:  # discard echo
                 resp = self._read_line()
-        except timeout_decorator.TimeoutError:
+        except (timeout_decorator.TimeoutError, TimeoutError):
             self._write(bytes(self.kNewLine, encoding="utf-8"))
+            return self.ReturnCodes["NoStatusResponse"]
+        if len(resp) == 0:
             return self.ReturnCodes["NoStatusResponse"]
         return int(resp.strip())
 
@@ -325,8 +327,8 @@ class ISPConnection:
         major = 0
 
         try:
-            minor = self._read_line()
-            major = self._read_line()
+            minor = self._read_line().strip()
+            major = self._read_line().strip()
         except timeout_decorator.TimeoutError:
             pass
         return f"{major}.{minor}"
