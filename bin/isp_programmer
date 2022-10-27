@@ -6,16 +6,16 @@ from ISPProgrammer import tools, UartDevice, GetPartDescriptor, BAUDRATES, ChipD
 import ISPProgrammer
 from intelhex import IntelHex
 #MassErase, InitConnection, ReadImage, WriteBinaryToFlash, , ReadSector, 
-
+import time
 retry = tools.retry
 calc_crc = tools.calc_crc
 
 
 def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1):
-    if(not no_sync):
-        kStartingBaudRate = BAUDRATES[0]
-    else:
+    if(no_sync):
         kStartingBaudRate = baudrate
+    else:
+        kStartingBaudRate = BAUDRATES[0]
 
     iodevice = UartDevice(device, baudrate=kStartingBaudRate)
     isp = ISPConnection(iodevice)
@@ -25,6 +25,8 @@ def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str
         isp.SyncConnection()
 
     isp.SetBaudRate(baudrate)
+    isp.baud_rate = baudrate
+    time.sleep(0.1)
     part_id = isp.ReadPartID()
 
     descriptor = GetPartDescriptor(chip_file, part_id)
@@ -73,7 +75,10 @@ def gr1(ctx, **kwargs):
 def QueryChip(ctx):
     iodevice = UartDevice(ctx.obj['device'], baudrate=ctx.obj['baud'])
     isp = ISPConnection(iodevice)
-    logging.info("Part UID: %s\nBoot Code Version: %s", isp.ReadUID(), isp.ReadBootCodeVersion())
+    boot_version = isp.ReadBootCodeVersion()
+    uid = isp.ReadUID()
+    part_id = isp.ReadPartID()
+    logging.info("Part ID: 0x%x\tPart UID: %s\tBoot Code Version: %s", part_id, uid, boot_version)
 
 
 @gr1.command()
