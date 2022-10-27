@@ -1,4 +1,4 @@
-# NXPISP
+# ISPProgrammer
 ISP Programmer for NXP Cortex-M Chips
 
 Command line programmer for the NXP ISP interface.
@@ -32,6 +32,9 @@ The configuration file is identical to that used by the lpctools project
     Read Chip Info: isp_programmer --device /dev/ttyUSB0 -b 9600 -crystal_frequency 12000 querychip
 
 ## Installation
+### pypi
+    pip install ISPProgrammer
+### From Source
 NXPISP is a python3 package and can be installed using pip.
 Clone the repository, enter the directory with setup.py in it and run
 pip install .
