@@ -469,6 +469,8 @@ class ISPConnection:
             raise UserWarning("Verification Failure")
         logging.info("Syncronization Successful")
 
+        self._write(bytes(self.kNewLine, encoding="utf-8"))
+        self.reset()
         time.sleep(0.1)
         self._write(bytes("A 1"+self.kNewLine, encoding="utf-8"))
         time.sleep(0.1)
