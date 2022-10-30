@@ -4,3 +4,4 @@ pyserial
 numpy
 timeout_decorator
 pandas
+pycrc

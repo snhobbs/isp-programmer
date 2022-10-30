@@ -1,4 +1,5 @@
 import logging
+import time
 from time import sleep
 import struct
 import timeout_decorator
@@ -153,16 +154,20 @@ def WriteFlashSector(isp: ISPConnection, chip: ChipDescription, sector: int, dat
 
     logging.debug("Calculate starting CRC")
     data_crc = calc_crc(data)
-    ram_crc = isp.ReadCRC(ram_address, num_bytes=len(data))
+    ram_crc_initial = isp.ReadCRC(ram_address, num_bytes=len(data))
 
-    logging.debug("Starting CRC: %d", ram_crc)
+    logging.debug("Starting CRC: %d", ram_crc_initial)
 
     logging.debug("Writing RAM %d", ram_address)
     assert chip.RamRangeLegal(ram_address, len(data))
     sleep(ram_write_sleep)
     isp.WriteToRam(ram_address, data)
     sleep(ram_write_sleep)
-    ram_crc = isp.ReadCRC(ram_address, num_bytes=len(data))
+    isp.reset()
+    ram_crc = tools.retry(isp.ReadCRC, count=5, exception=(UserWarning, ValueError))(ram_address, num_bytes=len(data))
+
+    # ram_crc = isp.ReadCRC(ram_address, num_bytes=len(data))
+    isp.reset()
     if data_crc == ram_crc:
         logging.debug(f"CRC Check successful {data_crc} {ram_crc}")
     else:
@@ -192,7 +197,8 @@ def WriteFlashSector(isp: ISPConnection, chip: ChipDescription, sector: int, dat
 
     isp.CopyRAMToFlash(flash_address, ram_address, chip.sector_bytes)
     sleep(flash_write_sleep)
-    flash_crc = isp.ReadCRC(flash_address, num_bytes=len(data))
+    flash_crc = tools.retry(isp.ReadCRC, count=5, exception=[UserWarning])(flash_address, num_bytes=len(data))
+    #flash_crc = isp.ReadCRC()
     assert flash_crc == data_crc
     assert isp.MemoryLocationsEqual(flash_address, ram_address, chip.sector_bytes)
 
@@ -212,6 +218,7 @@ def WriteBinaryToFlash(isp: ISPConnection, chip: ChipDescription, image: bytes, 
     Take the image as bytes object. Break the image into sectors and write each in reverse order.
     On completion return the flash signature which cna be stored for validity checking
     '''
+    flash_write_sleep = 0.25
     assert isinstance(image, bytes)
     logging.info("Program Length: %d", len(image))
 
@@ -224,6 +231,7 @@ def WriteBinaryToFlash(isp: ISPConnection, chip: ChipDescription, image: bytes, 
         logging.info(f"\nWriting Sector {sector}")
         data_chunk = image[(sector-start_sector) * chip.sector_bytes : (sector - start_sector + 1) * chip.sector_bytes]
         WriteSector(isp, chip, sector, data_chunk)
+        time.sleep(flash_write_sleep)
 
     assert chip.FlashAddressLegal(chip.FlashRange[0]) and chip.FlashAddressLegal(chip.FlashRange[1])
     '''  Flash signature reading is only supported for some chips and is partially impimented for others.

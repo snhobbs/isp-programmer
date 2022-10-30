@@ -80,8 +80,9 @@ def GetPartDescriptorLine(fname: str, partid: int) -> list:
     entries = ReadChipFile(fname)
     for _, entry in entries.iterrows():
         if partid == entry["part id"]:
+            print(partid, entry["part id"])
             return entry
-    raise UserWarning(f"PartId {partid : 0x%x} not found in {fname}")
+    raise UserWarning(f"PartId {partid} not found in {fname}")
 
 
 def GetPartDescriptor(fname: str, partid: int) -> dict:

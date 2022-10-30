@@ -42,7 +42,7 @@ def retry(_func=None, *, count=2, exception=timeout_decorator.TimeoutError, rais
                     value = func(*args, **kwargs)
                     break
                 except exception as e:
-                    logging.warning(f"{e}: Retry {i}/{count}")
+                    logging.warning(f"{type(e)}->{e}: Retry {i}/{count}")
                     if i >= count and raise_on_fail:
                         raise UserWarning(f"{_func} retry exceeded {count}")
             return value

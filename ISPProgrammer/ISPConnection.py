@@ -152,20 +152,26 @@ class ISPConnection:
     def reset(self):
         self._clear_serial()
 
-    def _get_return_code(self) -> int:
+    def _get_return_code(self, command_string: str) -> int:
         '''
         No exceptions are thrown.
         '''
         time.sleep(self._return_code_sleep)
         try:
             resp = self._read_line()
-            if self.echo_on:  # discard echo
+            if resp.strip() == command_string.strip():
+                logging.getLogger().debug("Command was echoed, Discarding line: %s", resp)
                 resp = self._read_line()
+            #if self.echo_on:  # discard echo
+            #    logging.getLogger().debug("ECHO ON, Discarding line: %s", resp)
+            #    resp = self._read_line()
         except (timeout_decorator.TimeoutError, TimeoutError):
             self._write(bytes(self.kNewLine, encoding="utf-8"))
             return self.ReturnCodes["NoStatusResponse"]
         if len(resp) == 0:
             return self.ReturnCodes["NoStatusResponse"]
+
+        logging.getLogger().debug("%s: %s", command_string, resp)
         return int(resp.strip())
 
     def _write(self, string : bytes) -> None:
@@ -179,7 +185,7 @@ class ISPConnection:
         Takes the command string, return the response code
         '''
         self._write(bytes(command_string + self.kNewLine, encoding="utf-8"))
-        return self._get_return_code()
+        return self._get_return_code(command_string)
 
     def Unlock(self):
         '''
@@ -251,7 +257,7 @@ class ISPConnection:
             data.append(ch)
 
         if len(data) != num_bytes:
-            logging.debug(f"{data}, {len(data)}, {num_bytes}")
+            logging.error(f"{data}, {len(data)}, {num_bytes}")
         assert len(data) == num_bytes
         return bytes(data)
 
@@ -340,7 +346,7 @@ class ISPConnection:
         '''
         command = f"M {address1} {address2} {num_bytes} {self.kNewLine}"
         self._write(bytes(command, encoding="utf-8"))
-        response_code = self._get_return_code()
+        response_code = self._get_return_code(command)
         if response_code not in (NXPReturnCodes["CMD_SUCCESS"], NXPReturnCodes["COMPARE_ERROR"]):
             RaiseReturnCodeError(response_code, "Compare")
 
@@ -371,7 +377,7 @@ class ISPConnection:
         function = "Read CRC"
         command = f"S {address} {num_bytes}"
 
-        crc_sleep = 0.01
+        self.reset()
         response_code = self._write_command(command)
         RaiseReturnCodeError(response_code, function)
         return int(self._read_line())
