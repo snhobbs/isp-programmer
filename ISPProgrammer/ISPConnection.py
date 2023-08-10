@@ -184,7 +184,8 @@ class ISPConnection:
         '''
         Takes the command string, return the response code
         '''
-        self._write(bytes(command_string + self.kNewLine, encoding="utf-8"))
+        new_line = self.kNewLine
+        self._write(bytes(f"{command_string}{new_line}", encoding="utf-8"))
         return self._get_return_code(command_string)
 
     def Unlock(self):
@@ -297,12 +298,13 @@ class ISPConnection:
         '''
         assert start <= end
         response_code = self._write_command(f"I {start} {end}")
-        try:
-            #self._read_line()  #  throw away echo ?
-            response = self._read_line()
-            logging.info(f"Check Sectors Blank response: {response}")
-        except timeout_decorator.TimeoutError:
-            pass
+        if response_code == 8:
+            try:
+                response = self._read_line()
+                response = self._read_line()
+                logging.getLogger().info(f"Check Sectors Blank response: {response}")
+            except timeout_decorator.TimeoutError:
+                pass
 
         if response_code not in (NXPReturnCodes["CMD_SUCCESS"], NXPReturnCodes["SECTOR_NOT_BLANK"]):
             RaiseReturnCodeError(response_code, "Blank Check Sectors")
@@ -430,40 +432,49 @@ class ISPConnection:
         sync_char = '?'
         # > ?\n
         self._write(bytes(sync_char, "utf-8"))
+        byte_in = self.iodevice.read()
+        if byte_in == sync_char:
+            # already syncronized
+            return
+
+        try:
+            frame_in = self._read_line()
+        except timeout_decorator.TimeoutError:
+            frame_in = tools.collection_to_string(self._get_data_buffer_contents())
+
+        valid_response = self.SyncString.strip()[1:] in frame_in
+        # < Synchronized\n
+        logging.debug(f"Sync string comparison {repr(frame_in)}, {self.SyncString.strip()}, {valid_response}")
+
+        if not valid_response:
+            raise UserWarning("Syncronization Failure")
+
+        #self._flush()
+        logging.debug(f"Echoing sync string, {repr(self.SyncStringBytes)}")
+        time.sleep(0.1)
+        self._write(self.SyncStringBytes) # echo SyncString
+        self._write(self.SyncStringBytes) # echo SyncString
+        self._write(self.SyncStringBytes) # echo SyncString
+        # > Synchronized\n
         frame_in = ""
+        try:
+            time.sleep(0.1)
+            frame_in = self._read_line()
+        except timeout_decorator.TimeoutError:
+            frame_in = tools.collection_to_string(self._get_data_buffer_contents())
+
+        logging.debug(f"{frame_in}")
+
+        # Discard an additional OK sent by device
+
+        self._write(bytes(self.kNewLine, encoding="utf-8"))
         time.sleep(0.1)
         try:
             frame_in = self._read_line()
         except timeout_decorator.TimeoutError:
             frame_in = tools.collection_to_string(self._get_data_buffer_contents())
 
-        valid_response = self.SyncString.strip() in frame_in
-        # < Synchronized\n
-        logging.debug(f"{frame_in}, {self.SyncString.strip()}, {valid_response}")
-
-        if not valid_response:
-            if len(frame_in) > 0 and (frame_in[0] == sync_char):  #  Already synced
-                pass
-            else:
-                raise UserWarning("Syncronization Failure")
-
-        #self._flush()
-        frame_in = ""
-        self._write(self.SyncStringBytes)#echo SyncString
-        # > Synchronized\n
-        try:
-            time.sleep(0.1)
-            frame_in = self._read_line()
-        except timeout_decorator.TimeoutError:
-            pass
-
-        # Discard an additional OK sent by device
-
-        self._write(bytes(self.kNewLine, encoding="utf-8"))
-        try:
-            frame_in = self._read_line()
-        except timeout_decorator.TimeoutError:
-            pass
+        logging.debug(f"{frame_in}")
 
         if not(self.SyncVerifiedString.strip() in frame_in):
             raise UserWarning("Verification Failure")
@@ -473,7 +484,7 @@ class ISPConnection:
         self.reset()
         time.sleep(0.1)
         self._write(bytes("A 1"+self.kNewLine, encoding="utf-8"))
-        time.sleep(0.1)
+        #time.sleep(0.1)
 
         try:
             frame_in = self._read_line()

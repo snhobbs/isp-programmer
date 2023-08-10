@@ -72,6 +72,14 @@ def gr1(ctx, **kwargs):
 
 @gr1.command()
 @click.pass_context
+def sync(ctx):
+    iodevice = UartDevice(ctx.obj['device'], baudrate=ctx.obj['baud'])
+    isp = ISPConnection(iodevice)
+    isp.SyncConnection()
+
+
+@gr1.command()
+@click.pass_context
 def QueryChip(ctx):
     iodevice = UartDevice(ctx.obj['device'], baudrate=ctx.obj['baud'])
     isp = ISPConnection(iodevice)
@@ -109,12 +117,30 @@ def WriteImage(ctx, imagein):
     isp.Go(0)
 
 
+@click.option('--imagein', type=str, required=True, help='Location of hex file to program')
+@gr1.command(help='Test CRC and exit if it matches the flash')
+@click.pass_context
+def FastWriteImage(ctx, imagein):
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    image = read_image(imagein)
+    image_read = ISPProgrammer.ReadImage(isp, chip)[:len(image)]
+    if 0:#bytes(image) == image_read:
+        logging.getLogger().info("Already programmed")
+    else:
+        ISPProgrammer.WriteImage(isp, chip, image, flash_write_sleep=0)
+        isp.Go(0)
+
+
+
 @click.option('--imageout', type=str, required=True, help='Name of hex file output')
 @gr1.command()
 @click.pass_context
 def ReadImage(ctx, imageout: str):
     isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
-    ISPProgrammer.ReadImage(isp, chip, imageout)
+    image = ISPProgrammer.ReadImage(isp, chip)
+    logging.getLogger().debug(image)
+    with open(imageout, 'wb') as f:
+        f.write(image)
 
 
 if __name__ == "__main__":

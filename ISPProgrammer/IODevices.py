@@ -61,6 +61,9 @@ class UartDevice(IODevice):
         assert isinstance(arr, bytes)
         self.uart.write(arr)
 
+    def read(self):
+        return self.uart.read()
+
     def Flush(self):
         self.uart.flush()
 
