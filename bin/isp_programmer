@@ -7,18 +7,25 @@ import ISPProgrammer
 from intelhex import IntelHex
 #MassErase, InitConnection, ReadImage, WriteBinaryToFlash, , ReadSector, 
 import time
+import os
+
+
 retry = tools.retry
 calc_crc = tools.calc_crc
 
 
-def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1):
+def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1, serial_sleep: float = 0):
     if(no_sync):
         kStartingBaudRate = baudrate
     else:
         kStartingBaudRate = BAUDRATES[0]
 
+    logging.info("baud rate %d", kStartingBaudRate)
     iodevice = UartDevice(device, baudrate=kStartingBaudRate)
     isp = ISPConnection(iodevice)
+    isp.serial_sleep = serial_sleep
+    isp.return_code_sleep = sleep_time
+    isp.reset()
     # print(baudrate, device, crystal_frequency, chip_file)
 
     if not no_sync:
@@ -26,7 +33,9 @@ def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str
 
     isp.SetBaudRate(baudrate)
     isp.baud_rate = baudrate
-    time.sleep(0.1)
+    time.sleep(max(0.1, sleep_time))
+    time.sleep(max(0.1, sleep_time))
+    isp.reset()
     part_id = isp.ReadPartID()
 
     descriptor = GetPartDescriptor(chip_file, part_id)
@@ -41,7 +50,7 @@ def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str
 
 
 def read_image(image_file: str):
-    extension = image_file.strip().split(".")[-1].lower()
+    extension = os.path.splitext(image_file)[-1].lstrip('.').lower()
     ih = IntelHex()
     ih.fromfile(image_file, format=extension)
     return ih.tobinarray()
@@ -57,6 +66,7 @@ def read_image(image_file: str):
 @click.option('--echo', is_flag=True)
 @click.option('--no-sync', is_flag=True)
 @click.option('--sleep-time', '-s', type=float, default=0.25, help='Sleep time between commands')
+@click.option('--serial-sleep', type=float, default=0, help='Sleep time between serial bytes')
 @click.option('--debug', is_flag=True)
 @click.pass_context
 def gr1(ctx, **kwargs):
@@ -92,7 +102,7 @@ def QueryChip(ctx):
 @gr1.command()
 @click.pass_context
 def MassErase(ctx):
-    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
     ISPProgrammer.MassErase(isp, chip)
     logging.info("Mass Erase Successful")
 
@@ -102,7 +112,7 @@ def MassErase(ctx):
 @gr1.command()
 @click.pass_context
 def WriteFlash(ctx, imagein, start_sector):
-    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
     image = read_image(imagein)
     ISPProgrammer.WriteBinaryToFlash(isp=isp, chip=chip, image=image, start_sector=start_sector)
 
@@ -111,7 +121,7 @@ def WriteFlash(ctx, imagein, start_sector):
 @gr1.command()
 @click.pass_context
 def WriteImage(ctx, imagein):
-    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
     image = read_image(imagein)
     ISPProgrammer.WriteImage(isp, chip, image)
     isp.Go(0)
@@ -121,7 +131,7 @@ def WriteImage(ctx, imagein):
 @gr1.command(help='Test CRC and exit if it matches the flash')
 @click.pass_context
 def FastWriteImage(ctx, imagein):
-    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
     image = read_image(imagein)
     image_read = ISPProgrammer.ReadImage(isp, chip)[:len(image)]
     if 0:#bytes(image) == image_read:
@@ -136,7 +146,7 @@ def FastWriteImage(ctx, imagein):
 @gr1.command()
 @click.pass_context
 def ReadImage(ctx, imageout: str):
-    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
+    isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
     image = ISPProgrammer.ReadImage(isp, chip)
     logging.getLogger().debug(image)
     with open(imageout, 'wb') as f:

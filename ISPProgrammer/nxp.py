@@ -164,6 +164,7 @@ def WriteFlashSector(isp: ISPConnection, chip: ChipDescription, sector: int, dat
     isp.WriteToRam(ram_address, data)
     sleep(ram_write_sleep)
     isp.reset()
+    sleep(ram_write_sleep)
     ram_crc = tools.retry(isp.ReadCRC, count=5, exception=(UserWarning, ValueError))(ram_address, num_bytes=len(data))
 
     # ram_crc = isp.ReadCRC(ram_address, num_bytes=len(data))
@@ -298,7 +299,12 @@ def MassErase(isp: ISPConnection, chip: ChipDescription):
     isp.EraseSector(0, last_sector)
 
 
-def InitConnection(isp: ISPConnection, chip):
+def InitConnection(isp: ISPConnection, chip: ChipDescription):
+    '''
+    Setups a connection to a reset ISP. Trys to sync, sets the baud rate and crystal frequency for the isp device settings
+    :param ISPConnection isp: an already opened link to an isp device
+    :param ChipDescription chip: object describing the targets characteristics
+    '''
     isp.reset()
     try:
         try:
