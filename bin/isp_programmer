@@ -10,52 +10,6 @@ import time
 import os
 
 
-retry = tools.retry
-calc_crc = tools.calc_crc
-
-
-def SetupChip(baudrate: int, device: str, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1, serial_sleep: float = 0):
-    if(no_sync):
-        kStartingBaudRate = baudrate
-    else:
-        kStartingBaudRate = BAUDRATES[0]
-
-    logging.info("baud rate %d", kStartingBaudRate)
-    iodevice = UartDevice(device, baudrate=kStartingBaudRate)
-    isp = ISPConnection(iodevice)
-    isp.serial_sleep = serial_sleep
-    isp.return_code_sleep = sleep_time
-    isp.reset()
-    # print(baudrate, device, crystal_frequency, chip_file)
-
-    if not no_sync:
-        isp.SyncConnection()
-
-    isp.SetBaudRate(baudrate)
-    isp.baud_rate = baudrate
-    time.sleep(max(0.1, sleep_time))
-    time.sleep(max(0.1, sleep_time))
-    isp.reset()
-    part_id = isp.ReadPartID()
-
-    descriptor = GetPartDescriptor(chip_file, part_id)
-    logging.info(f"{part_id}, {descriptor}")
-    chip = ChipDescription(descriptor)
-    chip.CrystalFrequency = crystal_frequency#12000#khz == 30MHz
-
-    print("Setting new baudrate %d"%baudrate)
-    isp.SetBaudRate(baudrate)  # set the chips baudrate
-    isp.baud_rate = baudrate  # change the driver baudrate
-    return isp, chip
-
-
-def read_image(image_file: str):
-    extension = os.path.splitext(image_file)[-1].lstrip('.').lower()
-    ih = IntelHex()
-    ih.fromfile(image_file, format=extension)
-    return ih.tobinarray()
-
-
 @click.group()
 @click.option('--device', '-d', default='/dev/ttyUSB0', help='Serial device')
 @click.option('--baud', '-b', type=int, default=BAUDRATES[0], help='Baudrate')

@@ -1,12 +1,25 @@
+import os
 import logging
 import time
 from time import sleep
 import struct
 import timeout_decorator
-from . import ISPConnection
-from .tools import calc_crc
-from . import tools
+from intelhex import IntelHex
+from .ISPConnection import ISPConnection
+from .tools import retry, calc_crc
+from . import tools, UartDevice, GetPartDescriptor
 kTimeout = 1
+
+BAUDRATES = (
+    9600,
+    19200,
+    38400,
+    57600,
+    115200,
+    230400,
+    460800
+)
+
 
 
 ###############################################################
@@ -154,8 +167,8 @@ def WriteFlashSector(isp: ISPConnection, chip: ChipDescription, sector: int, dat
 
     logging.debug("Calculate starting CRC")
     data_crc = calc_crc(data)
-    ram_crc_initial = isp.ReadCRC(ram_address, num_bytes=len(data))
 
+    ram_crc_initial = isp.ReadCRC(ram_address, num_bytes=len(data))
     logging.debug("Starting CRC: %d", ram_crc_initial)
 
     logging.debug("Writing RAM %d", ram_address)
@@ -188,11 +201,9 @@ def WriteFlashSector(isp: ISPConnection, chip: ChipDescription, sector: int, dat
     assert isp.CheckSectorsBlank(sector, sector)
 
     logging.info("Prep Sector")
-    sector_blank = isp.CheckSectorsBlank(sector, sector)
-    assert sector_blank
     isp.PrepSectorsForWrite(sector, sector)
-    logging.info("Write to Flash")
 
+    logging.info("Write to Flash")
     assert chip.RamRangeLegal(ram_address, chip.sector_bytes)
     assert chip.FlashRangeLegal(flash_address, chip.sector_bytes)
 
@@ -323,3 +334,46 @@ def InitConnection(isp: ISPConnection, chip: ChipDescription):
     except Exception as e:
         logging.error(e)
         raise
+
+def SetupChip(baudrate: int, device: object, crystal_frequency: int, chip_file: str, no_sync: bool = False, sleep_time : float = 1, serial_sleep: float = 0):
+    if(no_sync):
+        kStartingBaudRate = baudrate
+    else:
+        kStartingBaudRate = BAUDRATES[0]
+
+    logging.info("baud rate %d", kStartingBaudRate)
+    iodevice = UartDevice(device, baudrate=kStartingBaudRate)
+    isp = ISPConnection(iodevice)
+    isp.serial_sleep = serial_sleep
+    isp.return_code_sleep = sleep_time
+    isp.reset()
+    # print(baudrate, device, crystal_frequency, chip_file)
+
+    if not no_sync:
+        isp.SyncConnection()
+
+    isp.SetBaudRate(baudrate)
+    isp.baud_rate = baudrate
+    time.sleep(max(0.1, sleep_time))
+    time.sleep(max(0.1, sleep_time))
+    isp.reset()
+    part_id = isp.ReadPartID()
+
+    descriptor = GetPartDescriptor(chip_file, part_id)
+    logging.info(f"{part_id}, {descriptor}")
+    chip = ChipDescription(descriptor)
+    chip.CrystalFrequency = crystal_frequency#12000#khz == 30MHz
+
+    print("Setting new baudrate %d"%baudrate)
+    isp.SetBaudRate(baudrate)  # set the chips baudrate
+    isp.baud_rate = baudrate  # change the driver baudrate
+    return isp, chip
+
+
+def read_image(image_file: str):
+    extension = os.path.splitext(image_file)[-1].lstrip('.').lower()
+    ih = IntelHex()
+    ih.fromfile(image_file, format=extension)
+    return ih.tobinarray()
+
+

@@ -5,20 +5,11 @@ from collections import deque
 import timeout_decorator
 from timeout_decorator import timeout
 from . import IODevice
-from .tools import retry
+from .tools import retry, calc_crc 
 from . import tools
 
-kTimeout = 5
 
-BAUDRATES = (
-    9600,
-    19200,
-    38400,
-    57600,
-    115200,
-    230400,
-    460800
-)
+kTimeout = 5
 
 NXPReturnCodes = {
     "CMD_SUCCESS"                               : 0x0,
@@ -525,3 +516,6 @@ class ISPConnection:
             print(frame_in)
         except timeout_decorator.TimeoutError:
             pass
+
+
+
