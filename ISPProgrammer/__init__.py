@@ -1,5 +1,5 @@
 from .IODevices import IODevice, MockUart, UartDevice
-from .nxp import ChipDescription, WriteImage, MassErase, InitConnection, CheckFlashWrite, WriteBinaryToFlash, ReadImage, ReadSector
 from .parts_definitions import GetPartDescriptor
+from .nxp import ChipDescription, WriteImage, MassErase, InitConnection, CheckFlashWrite, WriteBinaryToFlash, ReadImage, ReadSector, SetupChip, read_image
 from . import tools
-from . ISPConnection import ISPConnection, BAUDRATES
+from . ISPConnection import ISPConnection

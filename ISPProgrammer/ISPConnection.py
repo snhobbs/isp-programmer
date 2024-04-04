@@ -5,20 +5,11 @@ from collections import deque
 import timeout_decorator
 from timeout_decorator import timeout
 from . import IODevice
-from .tools import retry
+from .tools import retry, calc_crc
 from . import tools
 
-kTimeout = 5
 
-BAUDRATES = (
-    9600,
-    19200,
-    38400,
-    57600,
-    115200,
-    230400,
-    460800
-)
+kTimeout = 5
 
 NXPReturnCodes = {
     "CMD_SUCCESS"                               : 0x0,
@@ -82,8 +73,6 @@ class ISPConnection:
     ISPConnection abstracts the interface to the chip, wrapping all responses and ensuring a reliable connection
     '''
     kNewLine = "\r\n"
-    _serial_sleep = 10e-3
-    _return_code_sleep = 0.05
     StatusRespLength = len(kNewLine) + 1
     kWordSize = 4  #  32 bit device
     #Parity = None
@@ -96,9 +85,28 @@ class ISPConnection:
     ReturnCodes = NXPReturnCodes
 
     def __init__(self, iodevice: IODevice):
+        self._return_code_sleep = 0.05
+        self._serial_sleep = 10e-3
         self.iodevice = iodevice
         self.data_buffer_in : Deque[int] = deque()
         self.echo_on = True
+
+    @property
+    def serial_sleep(self):
+        return self._serial_sleep
+
+    @serial_sleep.setter
+    def serial_sleep(self, value):
+        logging.debug("Setting sleep value %E", value)
+        self._serial_sleep = value
+
+    @property
+    def return_code_sleep(self):
+        return self._return_code_sleep
+
+    @return_code_sleep.setter
+    def return_code_sleep(self, value):
+        self._return_code_sleep = value
 
     @property
     def baud_rate(self):
@@ -108,15 +116,21 @@ class ISPConnection:
     def baud_rate(self, baudrate: int):
         self.iodevice.SetBaudrate(baudrate)
 
+    def _delay_write_serial(self, out: bytes) -> None:
+        for byte in out:
+            self.iodevice.write(bytes([byte]))
+            time.sleep(self.serial_sleep)
+
     def _write_serial(self, out: bytes) -> None:
-        time.sleep(self._serial_sleep)
         assert isinstance(out, bytes)
-        self.iodevice.Write(out)
-        time.sleep(self._serial_sleep)
+        if self.serial_sleep != 0:
+            self._delay_write_serial(out)
+        else:
+            self.iodevice.write(out)
         logging.log(logging.DEBUG-1, f"Write: [{out}]")
 
     def _flush(self):
-        self.iodevice.Flush()
+        self.iodevice.flush()
 
     @timeout(kTimeout)
     def _read_line(self) -> str:
@@ -137,7 +151,7 @@ class ISPConnection:
         '''
         Reads input buffer and stores in buffer
         '''
-        data_in = self.iodevice.ReadAll()
+        data_in = self.iodevice.read_all()
         dstr = bytes("".join([chr(ch) for ch in data_in]), "utf-8")
         if data_in:
             logging.log(logging.DEBUG-1, f"_read: <{dstr}>")
@@ -151,6 +165,9 @@ class ISPConnection:
 
     def reset(self):
         self._clear_serial()
+
+    def write_newline(self):
+        self._write(bytes(self.kNewLine, encoding="utf-8"))
 
     def _get_return_code(self, command_string: str) -> int:
         '''
@@ -453,8 +470,8 @@ class ISPConnection:
         logging.debug(f"Echoing sync string, {repr(self.SyncStringBytes)}")
         time.sleep(0.1)
         self._write(self.SyncStringBytes) # echo SyncString
-        self._write(self.SyncStringBytes) # echo SyncString
-        self._write(self.SyncStringBytes) # echo SyncString
+        self.write_newline()
+        self.write_newline()
         # > Synchronized\n
         frame_in = ""
         try:
@@ -493,3 +510,6 @@ class ISPConnection:
             print(frame_in)
         except timeout_decorator.TimeoutError:
             pass
+
+
+

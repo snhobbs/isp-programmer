@@ -5,16 +5,16 @@ kTimeout = 1
 
 class IODevice:
     ''' Generic for a byte IO device'''
-    def ReadByte(self):
+    def read_byte(self):
         pass
 
-    def ReadAll(self):
+    def read_all(self):
         pass
 
-    def Write(self, arr: bytes):
+    def write(self, arr: bytes):
         pass
 
-    def Flush(self):
+    def flush(self):
         pass
 
     def SetBaudrate(self, baudrate: int) -> None:
@@ -33,10 +33,10 @@ class MockUart(IODevice):
         self.baudrate = baudrate
         self.port = port
 
-    def ReadByte(self):
+    def read_byte(self):
         return 0x00
 
-    def ReadAll(self):
+    def read_all(self):
         return bytes(0x00)
 
     def SetBaudrate(self, baudrate: int) -> None:
@@ -50,22 +50,14 @@ class UartDevice(IODevice):
     '''Serial IO device wrapper around pyserial'''
     def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 9600):
         self.uart = Serial(port, baudrate, xonxoff=False)
+        self.read = self.uart.read
+        self.read_all = self.uart.read_all
+        self.read_byte = self.uart.read
+        self.flush = self.uart.flush
 
-    def ReadByte(self):
-        return self.uart.read()
-
-    def ReadAll(self) -> bytes:
-        return self.uart.read_all()
-
-    def Write(self, arr: bytes):
+    def write(self, arr: bytes):
         assert isinstance(arr, bytes)
         self.uart.write(arr)
-
-    def read(self):
-        return self.uart.read()
-
-    def Flush(self):
-        self.uart.flush()
 
     def SetBaudrate(self, baudrate: int) -> None:
         self.uart.baudrate = baudrate
@@ -79,3 +71,4 @@ class UartDevice(IODevice):
             return bytes(line).decode("utf-8")
         except UnicodeDecodeError:
             raise TimeoutError
+
