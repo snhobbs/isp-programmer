@@ -143,8 +143,8 @@ def WriteFlashSector(isp: ISPConnection, chip: ChipDescription, sector: int, dat
     After writing RAM check that the CRC matches the data in.
     After writing the Flash repeat the test
     '''
-    flash_write_sleep = 0.1
-    ram_write_sleep = 0.1
+    flash_write_sleep = 0.01
+    ram_write_sleep = 0.01
     ram_address = chip.RAMStartWrite
     flash_address = chip.FlashRange[0] + sector*chip.sector_bytes
     logging.info("\nWriting Sector: %d\tFlash Address: %x\tRAM Address: %x", sector, flash_address, ram_address)
@@ -218,7 +218,7 @@ def WriteBinaryToFlash(isp: ISPConnection, chip: ChipDescription, image: bytes, 
     Take the image as bytes object. Break the image into sectors and write each in reverse order.
     On completion return the flash signature which cna be stored for validity checking
     '''
-    flash_write_sleep = 0.25
+    flash_write_sleep = 0.05
     assert isinstance(image, bytes)
     logging.info("Program Length: %d", len(image))
 
@@ -264,7 +264,9 @@ def FindFirstBlankSector(isp: ISPConnection, chip) -> int:
     Returns the first blank sector, returns the last sector on failure
     '''
     for sector in range(chip.SectorCount):
-        if isp.CheckSectorsBlank(sector, chip.SectorCount - 1):
+        sector_blank = isp.CheckSectorsBlank(sector, chip.SectorCount - 1)
+        logging.getLogger().debug("Sector %d Blank: %d", sector, sector_blank)
+        if sector_blank:
             return sector
     return chip.SectorCount - 1
 
@@ -279,9 +281,10 @@ def ReadSector(isp: ISPConnection, chip: ChipDescription, sector: int) -> bytes:
 def ReadImage(isp: ISPConnection, chip: ChipDescription) -> bytes:
     image = bytes()
     blank_sector = FindFirstBlankSector(isp, chip)
+    logging.getLogger().info("First Blank Sector %d", blank_sector)
     sectors = []
     for sector in range(blank_sector):
-        logging.info("Sector %d", sector)
+        logging.getLogger().info("Sector %d", sector)
         sector = ReadSector(isp, chip, sector)
         sectors.append(sector)
 
@@ -307,7 +310,7 @@ def InitConnection(isp: ISPConnection, chip):
             # isp.Write(bytes(isp.kNewLine, encoding="utf-8"))
         # After syncronization some devices send a second OK at the first
         # command
-        isp.SetEcho(False)
+        # isp.SetEcho(False)
         isp.SetBaudRate(isp.baud_rate)
         logging.info("Baudrate set to %d", isp.baud_rate)
         isp.SetCrystalFrequency(chip.CrystalFrequency)

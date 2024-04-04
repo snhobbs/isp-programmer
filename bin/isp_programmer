@@ -72,6 +72,14 @@ def gr1(ctx, **kwargs):
 
 @gr1.command()
 @click.pass_context
+def sync(ctx):
+    iodevice = UartDevice(ctx.obj['device'], baudrate=ctx.obj['baud'])
+    isp = ISPConnection(iodevice)
+    isp.SyncConnection()
+
+
+@gr1.command()
+@click.pass_context
 def QueryChip(ctx):
     iodevice = UartDevice(ctx.obj['device'], baudrate=ctx.obj['baud'])
     isp = ISPConnection(iodevice)
@@ -114,7 +122,10 @@ def WriteImage(ctx, imagein):
 @click.pass_context
 def ReadImage(ctx, imageout: str):
     isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'])
-    ISPProgrammer.ReadImage(isp, chip, imageout)
+    image = ISPProgrammer.ReadImage(isp, chip)
+    logging.getLogger().debug(image)
+    with open(imageout, 'wb') as f:
+        f.write(image)
 
 
 if __name__ == "__main__":
