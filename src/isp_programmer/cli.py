@@ -59,7 +59,7 @@ def cli_MassErase(ctx):
 
 @click.option('--start_sector', type=int, default=0, required=True, help='Sector to write to')
 @click.option('--imagein', type=str, required=True, help='Location of hex file to program')
-@gr1.command("write flash", help="Write a specific flash sector")
+@gr1.command("write-flash", help="Write a specific flash sector")
 @click.pass_context
 def cli_WriteFlash(ctx, imagein, start_sector):
     isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
