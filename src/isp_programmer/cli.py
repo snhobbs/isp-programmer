@@ -1,13 +1,10 @@
-#!/usr/bin/env python3
+import time
+import os
 import logging
 import click
 import timeout_decorator
-from ISPProgrammer import tools, UartDevice, GetPartDescriptor, BAUDRATES, ChipDescription, ISPConnection
-import ISPProgrammer
 from intelhex import IntelHex
-#MassErase, InitConnection, ReadImage, WriteBinaryToFlash, , ReadSector, 
-import time
-import os
+from . import tools, UartDevice, GetPartDescriptor, BAUDRATES, ChipDescription, ISPConnection
 
 
 @click.group()
@@ -107,5 +104,9 @@ def ReadImage(ctx, imageout: str):
         f.write(image)
 
 
-if __name__ == "__main__":
+def main():
     gr1()
+
+
+if __name__ == "__main__":
+    main()

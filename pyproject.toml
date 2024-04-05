@@ -1,0 +1,52 @@
+[project]
+name = "isp_programmer"
+version = "1.2.0"
+description='NXP ISP Cortex-M programming tool'
+authors = [
+    {name = "Simon Hobbs", email = "simon.hobbs@electrooptical.net"},
+]
+license = {file="LICENSE"}
+readme = "README.md"
+
+requires-python = ">=3.6"
+keywords = ["isp", "nxp", "program", "uart"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+
+dependencies = [
+  "pyserial",
+  "pymodbus",
+  "python_utilities",
+  "pandas",
+  "intelhex",
+  "numpy",
+  "click",
+  'timeout_decorator',
+  'pycrc',
+  'pandas'
+]
+
+[project.urls]
+repository='https://github.com/snhobbs/NXPISP'
+url='https://github.com/snhobbs/NXPISP'
+
+[project.scripts]
+isp_programmer = "isp_programmer.cli:main"
+ISPProgrammer = "isp_programmer.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = [
+    "setuptools>=60",
+    "setuptools-scm>=8.0"
+]
+
+[tool.setuptools.package-data]
+isp_programmer= ["*.def", "*.ini"]
+
