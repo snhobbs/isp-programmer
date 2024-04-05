@@ -7,12 +7,14 @@ from intelhex import IntelHex
 from . import tools, UartDevice, GetPartDescriptor, BAUDRATES, ChipDescription, ISPConnection
 
 
+_chip_defs = os.path.join(os.path.getdir(__file__), "lpctools_parts.def")
+
 @click.group()
 @click.option('--device', '-d', default='/dev/ttyUSB0', help='Serial device')
 @click.option('--baud', '-b', type=int, default=BAUDRATES[0], help='Baudrate')
 @click.option('--crystal-frequency', '-c', type=int, default=12000,
               help="Crystal frequency of chip in khz")
-@click.option('--config-file', '-f', default='/etc/lpctools_parts.def',
+@click.option('--config-file', '-f', default=_chip_defs,
               help='Parts definition file')
 @click.option('--echo', is_flag=True)
 @click.option('--no-sync', is_flag=True)
