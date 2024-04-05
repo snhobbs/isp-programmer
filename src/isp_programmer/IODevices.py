@@ -71,4 +71,3 @@ class UartDevice(IODevice):
             return bytes(line).decode("utf-8")
         except UnicodeDecodeError:
             raise TimeoutError
-

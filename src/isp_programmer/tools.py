@@ -1,8 +1,8 @@
 import math
 import logging
-from pycrc.algorithms import Crc
 import functools
 import zlib
+from pycrc.algorithms import Crc
 import timeout_decorator
 
 def collection_to_string(arr):

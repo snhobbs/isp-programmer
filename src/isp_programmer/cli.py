@@ -1,13 +1,10 @@
-import time
 import os
 import logging
 import click
-import timeout_decorator
-from intelhex import IntelHex
-from . import tools, UartDevice, GetPartDescriptor, BAUDRATES, ChipDescription, ISPConnection
+from .ISPConnection import UartDevice, BAUDRATES, ISPConnection, SetupChip, MassErase, read_image_file_to_bin, ReadImage, WriteBinaryToFlash, WriteImage
 
 
-_chip_defs = os.path.join(os.path.getdir(__file__), "lpctools_parts.def")
+_chip_defs = os.path.join(os.path.dirname(__file__), "lpctools_parts.def")
 
 @click.group()
 @click.option('--device', '-d', default='/dev/ttyUSB0', help='Serial device')
@@ -33,17 +30,17 @@ def gr1(ctx, **kwargs):
         logging.getLogger().setLevel(logging.INFO)
 
 
-@gr1.command()
+@gr1.command("sync", help="Read the chip ID and boot code")
 @click.pass_context
-def sync(ctx):
+def cli_sync(ctx):
     iodevice = UartDevice(ctx.obj['device'], baudrate=ctx.obj['baud'])
     isp = ISPConnection(iodevice)
     isp.SyncConnection()
 
 
-@gr1.command()
+@gr1.command("query-chip", help="Read the chip ID and boot code")
 @click.pass_context
-def QueryChip(ctx):
+def cli_QueryChip(ctx):
     iodevice = UartDevice(ctx.obj['device'], baudrate=ctx.obj['baud'])
     isp = ISPConnection(iodevice)
     boot_version = isp.ReadBootCodeVersion()
@@ -52,55 +49,54 @@ def QueryChip(ctx):
     logging.info("Part ID: 0x%x\tPart UID: %s\tBoot Code Version: %s", part_id, uid, boot_version)
 
 
-@gr1.command()
+@gr1.command("erase", help="Erase entire chip")
 @click.pass_context
-def MassErase(ctx):
+def cli_MassErase(ctx):
     isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
-    ISPProgrammer.MassErase(isp, chip)
+    MassErase(isp, chip)
     logging.info("Mass Erase Successful")
 
 
 @click.option('--start_sector', type=int, default=0, required=True, help='Sector to write to')
 @click.option('--imagein', type=str, required=True, help='Location of hex file to program')
-@gr1.command()
+@gr1.command("write flash", help="Write a specific flash sector")
 @click.pass_context
-def WriteFlash(ctx, imagein, start_sector):
+def cli_WriteFlash(ctx, imagein, start_sector):
     isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
-    image = read_image(imagein)
-    ISPProgrammer.WriteBinaryToFlash(isp=isp, chip=chip, image=image, start_sector=start_sector)
+    image = read_image_file_to_bin(imagein)
+    WriteBinaryToFlash(isp=isp, chip=chip, image=image, start_sector=start_sector)
 
 
 @click.option('--imagein', type=str, required=True, help='Location of hex file to program')
-@gr1.command()
+@gr1.command("write-image", help="Write image")
 @click.pass_context
-def WriteImage(ctx, imagein):
+def cli_WriteImage(ctx, imagein):
     isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
-    image = read_image(imagein)
-    ISPProgrammer.WriteImage(isp, chip, image)
+    image = read_image_file_to_bin(imagein)
+    WriteImage(isp, chip, image)
     isp.Go(0)
 
 
 @click.option('--imagein', type=str, required=True, help='Location of hex file to program')
-@gr1.command(help='Test CRC and exit if it matches the flash')
+@gr1.command("fast-write-image", help='Test CRC and exit if it matches the flash')
 @click.pass_context
-def FastWriteImage(ctx, imagein):
+def cli_FastWriteImage(ctx, imagein):
     isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
-    image = read_image(imagein)
-    image_read = ISPProgrammer.ReadImage(isp, chip)[:len(image)]
-    if 0:#bytes(image) == image_read:
+    image = read_image_file_to_bin(imagein)
+    image_read = ReadImage(isp, chip)[:len(image)]
+    if bytes(image) == image_read:
         logging.getLogger().info("Already programmed")
     else:
-        ISPProgrammer.WriteImage(isp, chip, image, flash_write_sleep=0)
+        WriteImage(isp, chip, image, flash_write_sleep=0)
         isp.Go(0)
 
 
-
 @click.option('--imageout', type=str, required=True, help='Name of hex file output')
-@gr1.command()
+@gr1.command("read-image", help="Read the chip image")
 @click.pass_context
-def ReadImage(ctx, imageout: str):
+def cli_ReadImage(ctx, imageout: str):
     isp, chip = SetupChip(ctx.obj['baud'], ctx.obj['device'], ctx.obj['crystal_frequency'], ctx.obj['config_file'], ctx.obj['no_sync'], ctx.obj['sleep_time'], serial_sleep=ctx.obj['serial_sleep'])
-    image = ISPProgrammer.ReadImage(isp, chip)
+    image = ReadImage(isp, chip)
     logging.getLogger().debug(image)
     with open(imageout, 'wb') as f:
         f.write(image)
