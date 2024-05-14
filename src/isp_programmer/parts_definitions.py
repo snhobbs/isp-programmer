@@ -1,25 +1,26 @@
-'''
+"""
 Parser for the lpctools file, read into a data frame that is
 consitant with other formats
-'''
+"""
+
 import pandas
 import numpy as np
 
 column_names = [
-        "part id",
-        "name",
-        "FlashStart",
-        "FlashEnd",
-        "FlashSize",
-        "SectorCount",
-        "ResetVectorOffset",
-        "RAMStart",
-        "RAMEnd",
-        "RAMSize",
-        "RAMBufferOffset",
-        "RAMBufferSize",
-        "UU Encode",
-        "RAMStartWrite",
+    "part id",
+    "name",
+    "FlashStart",
+    "FlashEnd",
+    "FlashSize",
+    "SectorCount",
+    "ResetVectorOffset",
+    "RAMStart",
+    "RAMEnd",
+    "RAMSize",
+    "RAMBufferOffset",
+    "RAMBufferSize",
+    "UU Encode",
+    "RAMStartWrite",
 ]
 
 
@@ -43,9 +44,9 @@ def read_lpcparts_string(string: str):
 
     f = string.splitlines()
     for line in f:
-        if not line.strip() or line.strip()[0] == '#':
+        if not line.strip() or line.strip()[0] == "#":
             continue
-        split_line = line.strip().split(',')
+        split_line = line.strip().split(",")
         for column, index in lpc_tools_column_locations.items():
             value = split_line[index].strip()
             try:
@@ -68,10 +69,10 @@ def read_lpcparts_string(string: str):
 
 
 def ReadChipFile(fname: str) -> pandas.DataFrame:
-    '''
+    """
     Reads an lpcparts style file to a dataframe
-    '''
-    with open(fname, 'r') as f:
+    """
+    with open(fname, "r") as f:
         df = read_lpcparts_string(f.read())
     return df
 
@@ -88,16 +89,16 @@ def GetPartDescriptorLine(fname: str, partid: int) -> list:
 def GetPartDescriptor(fname: str, partid: int) -> dict:
     descriptor = GetPartDescriptorLine(fname, partid)
     if descriptor is None:
-        raise UserWarning("Warning chip %s not found in file %s"%(hex(partid), fname))
+        raise UserWarning("Warning chip %s not found in file %s" % (hex(partid), fname))
     return descriptor
 
 
 def check_parts_definition_dataframe(df):
-    '''
+    """
     Takes the standard layout dataframe, check the field validity
-    '''
+    """
     valid = True
     for _, line in df.iterrows():
         if line["RAMRange"][1] - line["RAMRange"][0] + 1 != line["RAMSize"]:
-            valid=False
+            valid = False
     return valid

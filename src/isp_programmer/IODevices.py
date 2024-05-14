@@ -4,7 +4,8 @@ kTimeout = 1
 
 
 class IODevice:
-    ''' Generic for a byte IO device'''
+    """Generic for a byte IO device"""
+
     def read_byte(self):
         pass
 
@@ -28,7 +29,8 @@ class IODevice:
 
 
 class MockUart(IODevice):
-    '''Mock IO device for testing'''
+    """Mock IO device for testing"""
+
     def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 9600):
         self.baudrate = baudrate
         self.port = port
@@ -47,8 +49,14 @@ class MockUart(IODevice):
 
 
 class UartDevice(IODevice):
-    '''Serial IO device wrapper around pyserial'''
-    def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 9600, timeout: float = kTimeout):
+    """Serial IO device wrapper around pyserial"""
+
+    def __init__(
+        self,
+        port: str = "/dev/ttyUSB0",
+        baudrate: int = 9600,
+        timeout: float = kTimeout,
+    ):
         self.uart = Serial(port, baudrate, xonxoff=False, timeout=timeout)
         self.read = self.uart.read
         self.read_all = self.uart.read_all
@@ -71,4 +79,3 @@ class UartDevice(IODevice):
             return bytes(line).decode("utf-8")
         except UnicodeDecodeError:
             raise TimeoutError
-
