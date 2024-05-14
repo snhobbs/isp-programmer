@@ -48,8 +48,8 @@ class MockUart(IODevice):
 
 class UartDevice(IODevice):
     '''Serial IO device wrapper around pyserial'''
-    def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 9600):
-        self.uart = Serial(port, baudrate, xonxoff=False)
+    def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 9600, timeout: float = kTimeout):
+        self.uart = Serial(port, baudrate, xonxoff=False, timeout=timeout)
         self.read = self.uart.read
         self.read_all = self.uart.read_all
         self.read_byte = self.uart.read
@@ -71,3 +71,4 @@ class UartDevice(IODevice):
             return bytes(line).decode("utf-8")
         except UnicodeDecodeError:
             raise TimeoutError
+
