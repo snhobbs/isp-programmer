@@ -138,7 +138,7 @@ class ISPConnection:
             self._delay_write_serial(out)
         else:
             self.iodevice.write(out)
-        logging.log(logging.DEBUG - 1, f"Write: [{out.decode('utf-8')}]")
+        logging.log(logging.DEBUG - 1, f"Write: [{out}]")
 
     def _flush(self):
         self.iodevice.flush()
@@ -567,16 +567,23 @@ class ChipDescription:
     }
 
     def __init__(self, descriptor: dict[str, str]):
-        self.RAMRange = [0, 0]
-        self.RAMBufferSize = 0
-        self.FlashRange = [0, 0]
-
         # for name in dict(descriptor):
         #    self.__setattr__(name, descriptor[name])
+
+        self.RAMRange = descriptor.pop("RAMRange")
+        self.FlashRange = descriptor.pop("FlashRange")
+        self.RAMBufferSize = int(descriptor.pop("RAMBufferSize"))
         self.SectorCount: int = int(descriptor.pop("SectorCount"))
         self.RAMStartWrite: int = int(descriptor.pop("RAMStartWrite"))
         self.CrystalFrequency = 12000  # khz == 30MHz
         self.kCheckSumLocation = 7  # 0x0000001c
+
+        assert self.RAMRange[0] > 0
+        assert self.RAMRange[1] > self.RAMRange[0]
+
+        assert self.FlashRange[1] > self.FlashRange[0]
+
+        assert self.SectorCount > 0
 
     @property
     def MaxByteTransfer(self) -> int:
@@ -586,6 +593,8 @@ class ChipDescription:
     def sector_bytes(self):
         sector_bytes = self.SectorSizePages * self.kPageSizeBytes
         assert sector_bytes % self.kWordSize == 0
+        if sector_bytes > self.MaxByteTransfer:
+            raise UserWarning(f"Sector Bytes: {sector_bytes} / {self.MaxByteTransfer}")
         assert sector_bytes <= self.MaxByteTransfer
         return sector_bytes
 

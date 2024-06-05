@@ -48,8 +48,12 @@ def read_lpcparts_string(string: str) -> dict[str, list]:
             continue
         split_line = line.strip().split(",")
         for column, index in lpc_tools_column_locations.items():
-            value: int = int(split_line[index].strip(), 0)
-            df_dict[column].append(value)
+            read = split_line[index].strip()
+            try:
+                value: int = int(read, 0)
+                df_dict[column].append(value)
+            except ValueError:
+                df_dict[column].append(read)
 
     for col in df_dict:
         df_dict[col] = np.array(df_dict[col])
