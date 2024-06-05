@@ -35,14 +35,14 @@ The configuration file is identical to that used by the lpctools project
 ### pypi
     pip install ISPProgrammer
 ### From Source
-NXPISP is a python3 package and can be installed using pip.
+isp-programmer is a python3 package and can be installed using pip.
 Clone the repository, enter the directory with setup.py in it and run
 pip install .
 The default location for the configuration file is at /etc/lpctools_parts.def.
 The file can either be copied there or the path passed in when calling the tool
 with the --config_file/-f flag.
 
-    1. cd NXPISP
+    1. cd isp-programmer
     2. pip install .
     3. cp lpctools_parts.def /etc
 
