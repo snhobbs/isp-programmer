@@ -24,7 +24,7 @@ column_names = [
 ]
 
 
-def read_lpcparts_string(string: str):
+def read_lpcparts_string(string: str) -> dict[str, list]:
     lpc_tools_column_locations = {
         "part id": 0,
         "name": 1,
@@ -38,7 +38,7 @@ def read_lpcparts_string(string: str):
         "RAMBufferSize": 9,
         "UU Encode": 10,
     }
-    df_dict = {}
+    df_dict: dict[str, list] = {}
     for column in lpc_tools_column_locations:
         df_dict[column] = []
 
@@ -48,11 +48,7 @@ def read_lpcparts_string(string: str):
             continue
         split_line = line.strip().split(",")
         for column, index in lpc_tools_column_locations.items():
-            value = split_line[index].strip()
-            try:
-                value = int(value, 0)
-            except ValueError:
-                pass
+            value: int = int(split_line[index].strip(), 0)
             df_dict[column].append(value)
 
     for col in df_dict:
@@ -77,16 +73,16 @@ def ReadChipFile(fname: str) -> pandas.DataFrame:
     return df
 
 
-def GetPartDescriptorLine(fname: str, partid: int) -> list:
+def GetPartDescriptorLine(fname: str, partid: int) -> dict[str, str]:
     entries = ReadChipFile(fname)
     for _, entry in entries.iterrows():
         if partid == entry["part id"]:
-            print(partid, entry["part id"])
             return entry
     raise UserWarning(f"PartId {partid} not found in {fname}")
 
 
-def GetPartDescriptor(fname: str, partid: int) -> dict:
+def GetPartDescriptor(fname: str, partid: int) -> dict[str, str]:
+    # FIXME redundent function
     descriptor = GetPartDescriptorLine(fname, partid)
     if descriptor is None:
         raise UserWarning("Warning chip %s not found in file %s" % (hex(partid), fname))
