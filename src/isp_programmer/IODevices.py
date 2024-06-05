@@ -58,10 +58,18 @@ class UartDevice(IODevice):
         timeout: float = kTimeout,
     ):
         self.uart = Serial(port, baudrate, xonxoff=False, timeout=timeout)
-        self.read = self.uart.read
-        self.read_all = self.uart.read_all
-        self.read_byte = self.uart.read
-        self.flush = self.uart.flush
+
+    def read(self, *args, **kwargs):
+        return self.uart.read(*args, **kwargs)
+
+    def flush(self, *args, **kwargs):
+        return self.uart.flush(*args, **kwargs)
+
+    def read_byte(self, *args, **kwargs):
+        return self.uart.read_byte(*args, **kwargs)
+
+    def read_all(self, *args, **kwargs):
+        return self.uart.read_all(*args, **kwargs)
 
     def write(self, arr: bytes):
         assert isinstance(arr, bytes)
