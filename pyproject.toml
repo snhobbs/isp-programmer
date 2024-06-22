@@ -39,7 +39,7 @@ ISPProgrammer = "isp_programmer.cli:main"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "src/isp_programmer"]
 
 [build-system]
 requires = [

@@ -14,6 +14,8 @@ from .ISPConnection import (
 )
 
 
+_log = logging.getLogger("isp_programmer")
+
 _chip_defs = os.path.join(os.path.dirname(__file__), "lpctools_parts.def")
 
 
@@ -41,12 +43,12 @@ _chip_defs = os.path.join(os.path.dirname(__file__), "lpctools_parts.def")
 def gr1(ctx, **kwargs):
     ctx.ensure_object(dict)
     ctx.obj.update(kwargs)
-    logging.basicConfig()
 
+    level = logging.INFO
     if kwargs["debug"]:
-        logging.getLogger().setLevel(logging.DEBUG)
-    else:
-        logging.getLogger().setLevel(logging.INFO)
+        level = logging.DEBUG
+
+    _log.setLevel(level)
 
 
 @gr1.command("sync", help="Read the chip ID and boot code")
@@ -65,7 +67,7 @@ def cli_QueryChip(ctx):
     boot_version = isp.ReadBootCodeVersion()
     uid = isp.ReadUID()
     part_id = isp.ReadPartID()
-    logging.info(
+    _log.info(
         "Part ID: 0x%x\tPart UID: %s\tBoot Code Version: %s", part_id, uid, boot_version
     )
 
@@ -83,7 +85,7 @@ def cli_MassErase(ctx):
         serial_sleep=ctx.obj["serial_sleep"],
     )
     MassErase(isp, chip)
-    logging.info("Mass Erase Successful")
+    _log.info("Mass Erase Successful")
 
 
 @click.option(
@@ -146,7 +148,7 @@ def cli_FastWriteImage(ctx, imagein):
     image = read_image_file_to_bin(imagein)
     image_read = ReadImage(isp, chip)[: len(image)]
     if bytes(image) == image_read:
-        logging.getLogger().info("Already programmed")
+        _log.info("Already programmed")
     else:
         WriteImage(isp, chip, image, flash_write_sleep=0)
         isp.Go(0)
@@ -166,7 +168,7 @@ def cli_ReadImage(ctx, imageout: str):
         serial_sleep=ctx.obj["serial_sleep"],
     )
     image = ReadImage(isp, chip)
-    logging.getLogger().debug(image)
+    _log.debug(image)
     with open(imageout, "wb") as f:
         f.write(image)
 

@@ -13,6 +13,8 @@ from .parts_definitions import GetPartDescriptor
 from . import tools
 
 
+_log = logging.getLogger("isp_programmer")
+
 kTimeout = 1
 
 
@@ -108,7 +110,7 @@ class ISPConnection:
 
     @serial_sleep.setter
     def serial_sleep(self, value):
-        logging.debug("Setting sleep value %E", value)
+        _log.debug("Setting sleep value %E", value)
         self._serial_sleep = value
 
     @property
@@ -138,7 +140,7 @@ class ISPConnection:
             self._delay_write_serial(out)
         else:
             self.iodevice.write(out)
-        logging.log(logging.DEBUG - 1, f"Write: [{out}]")
+        _log.log(logging.DEBUG - 1, f"Write: [{out}]")
 
     def _flush(self):
         self.iodevice.flush()
@@ -165,7 +167,7 @@ class ISPConnection:
         data_in = self.iodevice.read_all()
         dstr = bytes("".join([chr(ch) for ch in data_in]), "utf-8")
         if data_in:
-            logging.log(logging.DEBUG - 1, f"_read: <{dstr}>")
+            _log.log(logging.DEBUG - 1, f"_read: <{dstr}>")
         self.data_buffer_in.extend(data_in)
 
     def _clear_serial(self):
@@ -187,12 +189,12 @@ class ISPConnection:
         try:
             resp = self._read_line()
             if resp.strip() == command_string.strip():
-                logging.getLogger().debug(
+                _log.debug(
                     "Command was echoed, Discarding line: %s", resp
                 )
                 resp = self._read_line()
             # if self.echo_on:  # discard echo
-            #    logging.getLogger().debug("ECHO ON, Discarding line: %s", resp)
+            #    _log.debug("ECHO ON, Discarding line: %s", resp)
             #    resp = self._read_line()
         except (timeout_decorator.TimeoutError, TimeoutError):
             self._write(bytes(self.kNewLine, encoding="utf-8"))
@@ -200,11 +202,11 @@ class ISPConnection:
         if len(resp) == 0:
             return self.ReturnCodes["NoStatusResponse"]
 
-        logging.getLogger().debug("%s: %s", command_string, resp)
+        _log.debug("%s: %s", command_string, resp)
         return int(resp.strip())
 
     def _write(self, string: bytes) -> None:
-        logging.debug(string)
+        _log.debug(string)
         assert isinstance(string, bytes)
         self._write_serial(string)
         # self._write_serial(bytes(self.kNewLine, encoding = "utf-8"))
@@ -255,7 +257,7 @@ class ISPConnection:
         """
         assert len(data) % self.kWordSize == 0
         function_name = "Write to RAM"
-        logging.info("%s %d bytes", function_name, len(data))
+        _log.info("%s %d bytes", function_name, len(data))
 
         # when transfer is complete the handler sends OK<CR><LF>
         response_code = self._write_command(f"W {start} {len(data)}")
@@ -264,9 +266,9 @@ class ISPConnection:
         # Ignore response, it's not reliable
         # self._write(bytes(self.kNewLine, "utf-8"))  # end the data stream with normal line termination
         # response = self._read_line()
-        # logging.debug(response)
+        # _log.debug(response)
         # if self.SyncVerifiedString.strip() not in response:
-        #     logging.error(f"Expected {self.SyncVerifiedString}, received {response}. No confirmation from {function_name}")
+        #     _log.error(f"Expected {self.SyncVerifiedString}, received {response}. No confirmation from {function_name}")
 
     @timeout(10)
     def ReadMemory(self, start: int, num_bytes: int):
@@ -275,15 +277,15 @@ class ISPConnection:
         """
         assert num_bytes % self.kWordSize == 0  #  On a word boundary
         function = "ReadMemory"
-        logging.info(function)
+        _log.info(function)
 
         command = f"R {start} {num_bytes}"
-        logging.info(command)
+        _log.info(command)
         response_code = self._write_command(command)
         _raise_return_code_error(response_code, function)
 
         while len(self.data_buffer_in) < num_bytes:
-            logging.debug(
+            _log.debug(
                 f"{function}: bytes in {len(self.data_buffer_in)}/{num_bytes}"
             )
             time.sleep(0.1)
@@ -295,7 +297,7 @@ class ISPConnection:
             data.append(ch)
 
         if len(data) != num_bytes:
-            logging.error(f"{data}, {len(data)}, {num_bytes}")
+            _log.error(f"{data}, {len(data)}, {num_bytes}")
         assert len(data) == num_bytes
         return bytes(data)
 
@@ -343,7 +345,7 @@ class ISPConnection:
             try:
                 response = self._read_line()
                 response = self._read_line()
-                logging.getLogger().info(f"Check Sectors Blank response: {response}")
+                _log.info(f"Check Sectors Blank response: {response}")
             except timeout_decorator.TimeoutError:
                 pass
 
@@ -481,6 +483,7 @@ class ISPConnection:
         Otherwise send another '?' at a time until a response comes back or n number of characters have
         been sent.
         """
+        _log.info("Synchronizing")
         self.reset()
         sync_char = "?"
         # > ?\n
@@ -488,6 +491,7 @@ class ISPConnection:
         byte_in = self.iodevice.read()
         if byte_in == sync_char:
             # already syncronized
+            _log.info("Already synchronized")
             return
 
         try:
@@ -497,15 +501,16 @@ class ISPConnection:
 
         valid_response = self.SyncString.strip()[1:] in frame_in
         # < Synchronized\n
-        logging.debug(
+        _log.debug(
             f"Sync string comparison {repr(frame_in)}, {self.SyncString.strip()}, {valid_response}"
         )
 
         if not valid_response:
+            _log.error("Syncronization Failure")
             raise UserWarning("Syncronization Failure")
 
         # self._flush()
-        logging.debug(f"Echoing sync string, {repr(self.SyncStringBytes)}")
+        _log.debug(f"Echoing sync string, {repr(self.SyncStringBytes)}")
         time.sleep(0.1)
         self._write(self.SyncStringBytes)  # echo SyncString
         self.write_newline()
@@ -518,7 +523,7 @@ class ISPConnection:
         except timeout_decorator.TimeoutError:
             frame_in = tools.collection_to_string(self._get_data_buffer_contents())
 
-        logging.debug(f"{frame_in}")
+        _log.debug(f"{frame_in}")
 
         # Discard an additional OK sent by device
 
@@ -529,11 +534,12 @@ class ISPConnection:
         except timeout_decorator.TimeoutError:
             frame_in = tools.collection_to_string(self._get_data_buffer_contents())
 
-        logging.debug(f"{frame_in}")
+        _log.debug(f"{frame_in}")
 
         if self.SyncVerifiedString.strip() not in frame_in:
+            _log.error("Verification Failure")
             raise UserWarning("Verification Failure")
-        logging.info("Syncronization Successful")
+        _log.info("Syncronization Successful")
 
         self._write(bytes(self.kNewLine, encoding="utf-8"))
         self.reset()
@@ -602,7 +608,7 @@ class ChipDescription:
         return self.FlashRange[0] <= address <= self.FlashRange[1]
 
     def FlashRangeLegal(self, address, length):
-        logging.info(f"Flash range {self.FlashRange} {address} {length}")
+        _log.info(f"Flash range {self.FlashRange} {address} {length}")
         return (
             self.FlashAddressLegal(address)
             and self.FlashAddressLegal(address + length - 1)
@@ -704,7 +710,7 @@ def WriteFlashSector(
     ram_write_sleep = 0.01
     ram_address = chip.RAMStartWrite
     flash_address = chip.FlashRange[0] + sector * chip.sector_bytes
-    logging.info(
+    _log.info(
         "\nWriting Sector: %d\tFlash Address: %x\tRAM Address: %x",
         sector,
         flash_address,
@@ -714,13 +720,13 @@ def WriteFlashSector(
     assert len(data) == chip.sector_bytes
     # data += bytes(chip.sector_bytes - len(data))
 
-    logging.debug("Calculate starting CRC")
+    _log.debug("Calculate starting CRC")
     data_crc = tools.calc_crc(data)
 
     ram_crc_initial = isp.ReadCRC(ram_address, num_bytes=len(data))
-    logging.debug("Starting CRC: %d", ram_crc_initial)
+    _log.debug("Starting CRC: %d", ram_crc_initial)
 
-    logging.debug("Writing RAM %d", ram_address)
+    _log.debug("Writing RAM %d", ram_address)
     assert chip.RamRangeLegal(ram_address, len(data))
     time.sleep(ram_write_sleep)
     isp.WriteToRam(ram_address, data)
@@ -734,27 +740,27 @@ def WriteFlashSector(
     # ram_crc = isp.ReadCRC(ram_address, num_bytes=len(data))
     isp.reset()
     if data_crc == ram_crc:
-        logging.debug(f"CRC Check successful {data_crc} {ram_crc}")
+        _log.debug(f"CRC Check successful {data_crc} {ram_crc}")
     else:
-        logging.error(f"RAM CRC Check failed {data_crc} {ram_crc}")
+        _log.error(f"RAM CRC Check failed {data_crc} {ram_crc}")
 
     # Check to see if sector is already equal to RAM, if so skip
     ram_equal = isp.MemoryLocationsEqual(flash_address, ram_address, chip.sector_bytes)
     if ram_equal:
-        logging.info("Flash already equal to RAM, skipping write")
+        _log.info("Flash already equal to RAM, skipping write")
         return
 
-    logging.info("Prep Sector")
+    _log.info("Prep Sector")
     isp.PrepSectorsForWrite(sector, sector)
-    logging.info("Erase Sector")
+    _log.info("Erase Sector")
     isp.EraseSector(sector, sector)
     time.sleep(flash_write_sleep)
     assert isp.CheckSectorsBlank(sector, sector)
 
-    logging.info("Prep Sector")
+    _log.info("Prep Sector")
     isp.PrepSectorsForWrite(sector, sector)
 
-    logging.info("Write to Flash")
+    _log.info("Write to Flash")
     assert chip.RamRangeLegal(ram_address, chip.sector_bytes)
     assert chip.FlashRangeLegal(flash_address, chip.sector_bytes)
 
@@ -791,17 +797,17 @@ def WriteBinaryToFlash(
     """
     flash_write_sleep = 0.05
     assert isinstance(image, bytes)
-    logging.info("Program Length: %d", len(image))
+    _log.info("Program Length: %d", len(image))
 
     sector_count = tools.calc_sector_count(image, chip.sector_bytes)
     if start_sector + sector_count > chip.SectorCount:
-        logging.error(
+        _log.error(
             f"Invalid sector count\t Start: {start_sector}\tCount: {sector_count}\tEnd: {chip.SectorCount}"
         )
         return 1
     isp.Unlock()
     for sector in reversed(range(start_sector, start_sector + sector_count)):
-        logging.info(f"\nWriting Sector {sector}")
+        _log.info(f"\nWriting Sector {sector}")
         data_chunk = image[
             (sector - start_sector) * chip.sector_bytes : (sector - start_sector + 1)
             * chip.sector_bytes
@@ -815,8 +821,8 @@ def WriteBinaryToFlash(
     """  Flash signature reading is only supported for some chips and is partially impimented for others.
     time.sleep(0.5)
     chip_flash_sig = isp.ReadFlashSig(chip.FlashRange[0], chip.FlashRange[1])
-    logging.info(f"Flash Signature: {chip_flash_sig}")
-    logging.info("Programming Complete.")
+    _log.info(f"Flash Signature: {chip_flash_sig}")
+    _log.info("Programming Complete.")
     return chip_flash_sig
     """
     return 0
@@ -851,7 +857,7 @@ def FindFirstBlankSector(isp: ISPConnection, chip) -> int:
     """
     for sector in range(chip.SectorCount):
         sector_blank = isp.CheckSectorsBlank(sector, chip.SectorCount - 1)
-        logging.getLogger().debug("Sector %d Blank: %d", sector, sector_blank)
+        _log.debug("Sector %d Blank: %d", sector, sector_blank)
         if sector_blank:
             return sector
     return chip.SectorCount - 1
@@ -866,10 +872,10 @@ def ReadSector(isp: ISPConnection, chip: ChipDescription, sector: int) -> bytes:
 def ReadImage(isp: ISPConnection, chip: ChipDescription) -> bytes:
     image = bytes()
     blank_sector = FindFirstBlankSector(isp, chip)
-    logging.getLogger().info("First Blank Sector %d", blank_sector)
+    _log.info("First Blank Sector %d", blank_sector)
     sectors: list[bytes] = []
     for nsector in range(blank_sector):
-        logging.getLogger().info("Sector %d", nsector)
+        _log.info("Sector %d", nsector)
         sector: bytes = ReadSector(isp, chip, nsector)
         sectors.append(sector)
 
@@ -916,7 +922,7 @@ def SetupChip(
     else:
         kStartingBaudRate = BAUDRATES[0]
 
-    logging.info("baud rate %d", kStartingBaudRate)
+    _log.info("Using baud rate %d", kStartingBaudRate)
     iodevice: UartDevice = UartDevice(device, baudrate=kStartingBaudRate)
     isp = ISPConnection(iodevice)
     isp.serial_sleep = serial_sleep
@@ -935,7 +941,7 @@ def SetupChip(
     part_id = isp.ReadPartID()
 
     descriptor: dict[str, str] = GetPartDescriptor(chip_file, part_id)
-    logging.info(f"{part_id}, {descriptor}")
+    _log.info(f"{part_id}, {descriptor}")
     chip = ChipDescription(descriptor)
     chip.CrystalFrequency = crystal_frequency
 
