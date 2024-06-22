@@ -257,7 +257,7 @@ class ISPConnection:
         """
         assert len(data) % self.kWordSize == 0
         function_name = "Write to RAM"
-        _log.info("%s %d bytes", function_name, len(data))
+        _log.debug("%s %d bytes", function_name, len(data))
 
         # when transfer is complete the handler sends OK<CR><LF>
         response_code = self._write_command(f"W {start} {len(data)}")
@@ -277,10 +277,11 @@ class ISPConnection:
         """
         assert num_bytes % self.kWordSize == 0  #  On a word boundary
         function = "ReadMemory"
-        _log.info(function)
-
         command = f"R {start} {num_bytes}"
-        _log.info(command)
+
+        msg = f"{function} {command}"
+        _log.info(msg)
+
         response_code = self._write_command(command)
         _raise_return_code_error(response_code, function)
 
@@ -345,7 +346,7 @@ class ISPConnection:
             try:
                 response = self._read_line()
                 response = self._read_line()
-                _log.info(f"Check Sectors Blank response: {response}")
+                _log.debug(f"Check Sectors Blank response: {response}")
             except timeout_decorator.TimeoutError:
                 pass
 
@@ -608,7 +609,7 @@ class ChipDescription:
         return self.FlashRange[0] <= address <= self.FlashRange[1]
 
     def FlashRangeLegal(self, address, length):
-        _log.info(f"Flash range {self.FlashRange} {address} {length}")
+        _log.debug(f"Flash range {self.FlashRange} {address} {length}")
         return (
             self.FlashAddressLegal(address)
             and self.FlashAddressLegal(address + length - 1)
@@ -747,20 +748,20 @@ def WriteFlashSector(
     # Check to see if sector is already equal to RAM, if so skip
     ram_equal = isp.MemoryLocationsEqual(flash_address, ram_address, chip.sector_bytes)
     if ram_equal:
-        _log.info("Flash already equal to RAM, skipping write")
+        _log.debug("Flash already equal to RAM, skipping write")
         return
 
-    _log.info("Prep Sector")
+    _log.debug("Prep Sector")
     isp.PrepSectorsForWrite(sector, sector)
-    _log.info("Erase Sector")
+    _log.debug("Erase Sector")
     isp.EraseSector(sector, sector)
     time.sleep(flash_write_sleep)
     assert isp.CheckSectorsBlank(sector, sector)
 
-    _log.info("Prep Sector")
+    _log.debug("Prep Sector")
     isp.PrepSectorsForWrite(sector, sector)
 
-    _log.info("Write to Flash")
+    _log.debug("Write to Flash")
     assert chip.RamRangeLegal(ram_address, chip.sector_bytes)
     assert chip.FlashRangeLegal(flash_address, chip.sector_bytes)
 
@@ -807,7 +808,7 @@ def WriteBinaryToFlash(
         return 1
     isp.Unlock()
     for sector in reversed(range(start_sector, start_sector + sector_count)):
-        _log.info(f"\nWriting Sector {sector}")
+        _log.info(f"\nWriting Sector {sector} / {sector_count}")
         data_chunk = image[
             (sector - start_sector) * chip.sector_bytes : (sector - start_sector + 1)
             * chip.sector_bytes
@@ -872,10 +873,10 @@ def ReadSector(isp: ISPConnection, chip: ChipDescription, sector: int) -> bytes:
 def ReadImage(isp: ISPConnection, chip: ChipDescription) -> bytes:
     image = bytes()
     blank_sector = FindFirstBlankSector(isp, chip)
-    _log.info("First Blank Sector %d", blank_sector)
+    _log.debug("First Blank Sector %d", blank_sector)
     sectors: list[bytes] = []
     for nsector in range(blank_sector):
-        _log.info("Sector %d", nsector)
+        _log.debug("Sector %d", nsector)
         sector: bytes = ReadSector(isp, chip, nsector)
         sectors.append(sector)
 
@@ -922,7 +923,7 @@ def SetupChip(
     else:
         kStartingBaudRate = BAUDRATES[0]
 
-    _log.info("Using baud rate %d", kStartingBaudRate)
+    _log.debug("Using baud rate %d", kStartingBaudRate)
     iodevice: UartDevice = UartDevice(device, baudrate=kStartingBaudRate)
     isp = ISPConnection(iodevice)
     isp.serial_sleep = serial_sleep
@@ -941,7 +942,7 @@ def SetupChip(
     part_id = isp.ReadPartID()
 
     descriptor: dict[str, str] = GetPartDescriptor(chip_file, part_id)
-    _log.info(f"{part_id}, {descriptor}")
+    _log.debug(f"{part_id}, {descriptor}")
     chip = ChipDescription(descriptor)
     chip.CrystalFrequency = crystal_frequency
 
