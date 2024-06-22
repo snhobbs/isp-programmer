@@ -550,9 +550,9 @@ class ISPConnection:
 
         try:
             frame_in = self._read_line()
-            print(frame_in)
+            _log.debug(frame_in)
             frame_in = self._read_line()
-            print(frame_in)
+            _log.debug(frame_in)
         except timeout_decorator.TimeoutError:
             pass
 
@@ -946,7 +946,7 @@ def SetupChip(
     chip = ChipDescription(descriptor)
     chip.CrystalFrequency = crystal_frequency
 
-    print("Setting new baudrate %d" % baudrate)
+    _log.debug("Setting new baudrate %d" % baudrate)
     isp.SetBaudRate(baudrate)  # set the chips baudrate
     isp.baud_rate = baudrate  # change the driver baudrate
     return isp, chip
