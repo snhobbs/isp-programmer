@@ -17,7 +17,6 @@ classifiers = [
 dependencies = [
   "pyserial",
   "pymodbus",
-  "python_utilities",
   "pandas",
   "intelhex",
   "numpy",
