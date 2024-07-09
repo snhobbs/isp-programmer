@@ -13,10 +13,9 @@ from .IODevices import IODevice, UartDevice
 from .parts_definitions import GetPartDescriptor
 from . import tools
 
-
 _log = logging.getLogger("isp_programmer")
 
-kTimeout = 0.1
+kTimeout = 1
 
 
 BAUDRATES = (9600, 19200, 38400, 57600, 115200, 230400, 460800)
