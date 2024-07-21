@@ -3,10 +3,13 @@ import os
 import time
 import logging
 import struct
+from dataclasses import dataclass
+import typing
 from typing import Deque
 from collections import deque
-import timeout_decorator
-from timeout_decorator import timeout
+
+# import timeout_decorator
+# from timeout_decorator import timeout
 from intelhex import IntelHex
 from .IODevices import IODevice, UartDevice
 from .parts_definitions import GetPartDescriptor
@@ -80,6 +83,19 @@ def _raise_return_code_error(code: int, call_name: str) -> None:
         )
 
 
+@dataclass
+class Settings:
+    safe_write: bool = True
+    flash_write_sleep: float = 0.01
+    ram_write_sleep: float = 0.01
+    return_code_sleep: float = 0.05
+    serial_sleep: float = 0.01
+    serial_sleep_no_echo: float = 0
+    readcrc_sleep: float = 0.1
+    set_baudrate_sleep: float = 1
+    read_part_id_sleep: float = 0.5
+
+
 class ISPConnection:
     """
     ISPConnection abstracts the interface to the chip, wrapping all responses and ensuring a reliable connection
@@ -97,29 +113,31 @@ class ISPConnection:
     # SyncVerifiedBytes = bytes(SyncVerifiedString, encoding="utf-8")
     ReturnCodes = NXPReturnCodes
 
-    def __init__(self, iodevice: IODevice):
-        self._return_code_sleep = 0.05
-        self._serial_sleep = 10e-3
+    def __init__(self, iodevice: IODevice, settings: Settings | None = None):
+        if settings is None:
+            settings = Settings()
+
         self.iodevice = iodevice
         self.data_buffer_in: Deque[int] = deque()
         self.echo_on = True
+        self.settings = settings
 
     @property
     def serial_sleep(self):
-        return self._serial_sleep
+        return self.settings.serial_sleep
 
     @serial_sleep.setter
     def serial_sleep(self, value):
         _log.debug("Setting sleep value %E", value)
-        self._serial_sleep = value
+        self.settings.serial_sleep = value
 
     @property
     def return_code_sleep(self):
-        return self._return_code_sleep
+        return self.settings.return_code_sleep
 
     @return_code_sleep.setter
     def return_code_sleep(self, value):
-        self._return_code_sleep = value
+        self.settings.return_code_sleep = value
 
     @property
     def baud_rate(self):
@@ -140,12 +158,12 @@ class ISPConnection:
             self._delay_write_serial(out)
         else:
             self.iodevice.write(out)
-        _log.log(logging.DEBUG - 1, f"Write: [{out}]")
+        _log.log(logging.DEBUG - 1, f"Write: [{out!r}]")
 
     def _flush(self):
         self.iodevice.flush()
 
-    @timeout(kTimeout)
+    # @timeout(kTimeout)
     def _read_line(self) -> str:
         """
         Read until a new line is found.
@@ -172,12 +190,8 @@ class ISPConnection:
 
     def _clear_serial(self):
         for _ in range(2):
-            tools.retry(
-                self._read,
-                count=10,
-                exception=timeout_decorator.TimeoutError,
-                raise_on_fail=False,
-            )()
+            time.sleep(self.serial_sleep)
+            self._read()
             self._clear_buffer()
             self._flush()
 
@@ -185,18 +199,16 @@ class ISPConnection:
         """
         No exceptions are thrown.
         """
-        time.sleep(self._return_code_sleep)
+        time.sleep(self.settings.return_code_sleep)
         try:
             resp = self._read_line()
             if resp.strip() == command_string.strip():
-                _log.debug(
-                    "Command was echoed, Discarding line: %s", resp
-                )
+                _log.debug("Command was echoed, Discarding line: %s", resp)
                 resp = self._read_line()
             # if self.echo_on:  # discard echo
             #    _log.debug("ECHO ON, Discarding line: %s", resp)
             #    resp = self._read_line()
-        except (timeout_decorator.TimeoutError, TimeoutError):
+        except TimeoutError:
             self._write(bytes(self.kNewLine, encoding="utf-8"))
             return self.ReturnCodes["NoStatusResponse"]
         if len(resp) == 0:
@@ -264,13 +276,8 @@ class ISPConnection:
         _raise_return_code_error(response_code, function_name)
         self._write(data)  # Stream data after confirmation
         # Ignore response, it's not reliable
-        # self._write(bytes(self.kNewLine, "utf-8"))  # end the data stream with normal line termination
-        # response = self._read_line()
-        # _log.debug(response)
-        # if self.SyncVerifiedString.strip() not in response:
-        #     _log.error(f"Expected {self.SyncVerifiedString}, received {response}. No confirmation from {function_name}")
 
-    @timeout(10)
+    # @timeout(10)
     def ReadMemory(self, start: int, num_bytes: int):
         """
         Send command with newline, receive response code\r\n<data>
@@ -286,9 +293,7 @@ class ISPConnection:
         _raise_return_code_error(response_code, function)
 
         while len(self.data_buffer_in) < num_bytes:
-            _log.debug(
-                f"{function}: bytes in {len(self.data_buffer_in)}/{num_bytes}"
-            )
+            _log.debug(f"{function}: bytes in {len(self.data_buffer_in)}/{num_bytes}")
             time.sleep(0.1)
             self._read()
         # Command success is sent at the end of the transferr
@@ -304,7 +309,7 @@ class ISPConnection:
 
     def PrepSectorsForWrite(self, start: int, end: int):
         command = f"P {start} {end}"
-        response_code = tools.retry(self._write_command, count=5)(command)
+        response_code = self._write_command(command)
         _raise_return_code_error(response_code, "Prep Sectors")
 
     def CopyRAMToFlash(self, flash_address: int, ram_address: int, num_bytes: int):
@@ -347,7 +352,7 @@ class ISPConnection:
                 response = self._read_line()
                 response = self._read_line()
                 _log.debug(f"Check Sectors Blank response: {response}")
-            except timeout_decorator.TimeoutError:
+            except TimeoutError:
                 pass
 
         if response_code not in (
@@ -363,13 +368,9 @@ class ISPConnection:
         """
         response_code = self._write_command("J")
         _raise_return_code_error(response_code, "Read Part ID")
+        time.sleep(self.settings.read_part_id_sleep)
+        resp = self._read_line()
 
-        resp = tools.retry(
-            self._read_line,
-            count=1,
-            exception=timeout_decorator.TimeoutError,
-            raise_on_fail=False,
-        )()
         with contextlib.suppress(TypeError):
             return int(resp)
         return 0
@@ -387,7 +388,7 @@ class ISPConnection:
         try:
             minor = self._read_line().strip()
             major = self._read_line().strip()
-        except timeout_decorator.TimeoutError:
+        except TimeoutError:
             pass
         return f"{major}.{minor}"
 
@@ -412,7 +413,7 @@ class ISPConnection:
             try:
                 _ = self._read_line()
                 # discard the comparison
-            except timeout_decorator.TimeoutError:
+            except TimeoutError:
                 pass
         return _return_code_success(response_code)
 
@@ -464,7 +465,7 @@ class ISPConnection:
                 if self.SyncVerifiedString in frame_in:
                     verified = True
                     break
-            except timeout_decorator.TimeoutError:
+            except TimeoutError:
                 pass
         if not verified:
             raise UserWarning("Verification Failure")
@@ -497,7 +498,7 @@ class ISPConnection:
 
         try:
             frame_in = self._read_line()
-        except timeout_decorator.TimeoutError:
+        except TimeoutError:
             frame_in = tools.collection_to_string(self._get_data_buffer_contents())
 
         valid_response = self.SyncString.strip()[1:] in frame_in
@@ -521,7 +522,7 @@ class ISPConnection:
         try:
             time.sleep(0.1)
             frame_in = self._read_line()
-        except timeout_decorator.TimeoutError:
+        except TimeoutError:
             frame_in = tools.collection_to_string(self._get_data_buffer_contents())
 
         _log.debug(f"{frame_in}")
@@ -532,7 +533,7 @@ class ISPConnection:
         time.sleep(0.1)
         try:
             frame_in = self._read_line()
-        except timeout_decorator.TimeoutError:
+        except TimeoutError:
             frame_in = tools.collection_to_string(self._get_data_buffer_contents())
 
         _log.debug(f"{frame_in}")
@@ -553,7 +554,7 @@ class ISPConnection:
             _log.debug(frame_in)
             frame_in = self._read_line()
             _log.debug(frame_in)
-        except timeout_decorator.TimeoutError:
+        except TimeoutError:
             pass
 
 
@@ -573,12 +574,12 @@ class ChipDescription:
         "CRP3": 0x43218765,
     }
 
-    def __init__(self, descriptor: dict[str, str]):
+    def __init__(self, descriptor: dict[str, typing.Any]):
         # for name in dict(descriptor):
         #    self.__setattr__(name, descriptor[name])
 
-        self.RAMRange = descriptor.pop("RAMRange")
-        self.FlashRange = descriptor.pop("FlashRange")
+        self.RAMRange: list[int] = descriptor.pop("RAMRange")
+        self.FlashRange: list[int] = descriptor.pop("FlashRange")
         self.RAMBufferSize = int(descriptor.pop("RAMBufferSize"))
         self.SectorCount: int = int(descriptor.pop("SectorCount"))
         self.RAMStartWrite: int = int(descriptor.pop("RAMStartWrite"))
@@ -707,8 +708,12 @@ def WriteFlashSector(
     After writing RAM check that the CRC matches the data in.
     After writing the Flash repeat the test
     """
-    flash_write_sleep = 0.01
-    ram_write_sleep = 0.01
+
+    flash_write_sleep = isp.settings.flash_write_sleep
+    ram_write_sleep = isp.settings.ram_write_sleep
+    readcrc_sleep = isp.settings.readcrc_sleep
+    use_safe_write = isp.settings.safe_write
+
     ram_address = chip.RAMStartWrite
     flash_address = chip.FlashRange[0] + sector * chip.sector_bytes
     _log.info(
@@ -734,9 +739,7 @@ def WriteFlashSector(
     time.sleep(ram_write_sleep)
     isp.reset()
     time.sleep(ram_write_sleep)
-    ram_crc = tools.retry(isp.ReadCRC, count=5, exception=(UserWarning, ValueError))(
-        ram_address, num_bytes=len(data)
-    )
+    ram_crc = isp.ReadCRC(ram_address, num_bytes=len(data))
 
     # ram_crc = isp.ReadCRC(ram_address, num_bytes=len(data))
     isp.reset()
@@ -746,17 +749,22 @@ def WriteFlashSector(
         _log.error(f"RAM CRC Check failed {data_crc} {ram_crc}")
 
     # Check to see if sector is already equal to RAM, if so skip
-    ram_equal = isp.MemoryLocationsEqual(flash_address, ram_address, chip.sector_bytes)
-    if ram_equal:
-        _log.debug("Flash already equal to RAM, skipping write")
-        return
+    if use_safe_write:
+        ram_equal = isp.MemoryLocationsEqual(
+            flash_address, ram_address, chip.sector_bytes
+        )
+        if ram_equal:
+            _log.debug("Flash already equal to RAM, skipping write")
+            return
 
     _log.debug("Prep Sector")
     isp.PrepSectorsForWrite(sector, sector)
     _log.debug("Erase Sector")
     isp.EraseSector(sector, sector)
     time.sleep(flash_write_sleep)
-    assert isp.CheckSectorsBlank(sector, sector)
+
+    if use_safe_write:
+        assert isp.CheckSectorsBlank(sector, sector)
 
     _log.debug("Prep Sector")
     isp.PrepSectorsForWrite(sector, sector)
@@ -766,13 +774,12 @@ def WriteFlashSector(
     assert chip.FlashRangeLegal(flash_address, chip.sector_bytes)
 
     isp.CopyRAMToFlash(flash_address, ram_address, chip.sector_bytes)
-    time.sleep(flash_write_sleep)
-    flash_crc = tools.retry(isp.ReadCRC, count=5, exception=[UserWarning])(
-        flash_address, num_bytes=len(data)
-    )
-    # flash_crc = isp.ReadCRC()
+    time.sleep(readcrc_sleep)
+    flash_crc = isp.ReadCRC(flash_address, num_bytes=len(data))
+
     assert flash_crc == data_crc
-    assert isp.MemoryLocationsEqual(flash_address, ram_address, chip.sector_bytes)
+    if use_safe_write:
+        assert isp.MemoryLocationsEqual(flash_address, ram_address, chip.sector_bytes)
 
 
 def WriteSector(isp: ISPConnection, chip: ChipDescription, sector: int, data: bytes):
@@ -790,13 +797,11 @@ def WriteBinaryToFlash(
     chip: ChipDescription,
     image: bytes,
     start_sector: int,
-    flash_write_sleep: float = 0.05,
 ) -> int:
     """
     Take the image as bytes object. Break the image into sectors and write each in reverse order.
     On completion return the flash signature which cna be stored for validity checking
     """
-    flash_write_sleep = 0.05
     assert isinstance(image, bytes)
     _log.info("Program Length: %d", len(image))
 
@@ -814,7 +819,7 @@ def WriteBinaryToFlash(
             * chip.sector_bytes
         ]
         WriteSector(isp, chip, sector, data_chunk)
-        time.sleep(flash_write_sleep)
+        time.sleep(isp.settings.flash_write_sleep)
 
     assert chip.FlashAddressLegal(chip.FlashRange[0]) and chip.FlashAddressLegal(
         chip.FlashRange[1]
@@ -833,7 +838,6 @@ def WriteImage(
     isp: ISPConnection,
     chip: ChipDescription,
     imagein: bytes,
-    flash_write_sleep: float = 0.05,
 ):
     """
     1. Overwrite first sector which clears the checksum bytes making the image unbootable, preventing bricking
@@ -847,9 +851,7 @@ def WriteImage(
 
     # image = RemoveBootableCheckSum(chip.kCheckSumLocation, prog)
     image = MakeBootable(chip.kCheckSumLocation, imagein)
-    WriteBinaryToFlash(
-        isp, chip, image, start_sector=0, flash_write_sleep=flash_write_sleep
-    )
+    WriteBinaryToFlash(isp, chip, image, start_sector=0)
 
 
 def FindFirstBlankSector(isp: ISPConnection, chip) -> int:
@@ -897,8 +899,7 @@ def SetupChip(
     crystal_frequency: int,
     chip_file: str,
     no_sync: bool = False,
-    sleep_time: float = 1,
-    serial_sleep: float = 0,
+    settings: Settings | None = None,
 ):
     """
     :param int baudrate: The baudrate to set or use. If no_sync is True this baudrate is assumed to already be set
@@ -906,8 +907,7 @@ def SetupChip(
     :param float crystal_frequency: On board oscillator
     :param str chip_file: Alternate file to find chip settings
     :param bool no_sync: Whether or not to synchronize the channel on start
-    :param float sleep_time: Time between operations
-    :param float serial_sleep: Time between serial commands
+    :param Settings settings: Time between serial commands
     :return ISPConnection isp: an already opened link to an isp device
     :return ChipDescription chip: object describing the targets characteristics
 
@@ -918,26 +918,24 @@ def SetupChip(
     + Reads the chip ID and returns the matching chip description
     """
 
+    kStartingBaudRate = BAUDRATES[0]
     if no_sync:
         kStartingBaudRate = baudrate
-    else:
-        kStartingBaudRate = BAUDRATES[0]
 
     _log.debug("Using baud rate %d", kStartingBaudRate)
     iodevice: UartDevice = UartDevice(device, baudrate=kStartingBaudRate)
-    isp = ISPConnection(iodevice)
-    isp.serial_sleep = serial_sleep
-    isp.return_code_sleep = sleep_time
+    isp = ISPConnection(iodevice, settings=settings)
     isp.reset()
     # print(baudrate, device, crystal_frequency, chip_file)
 
     if not no_sync:
         isp.SyncConnection()
 
+    isp.SetEcho(False)
+    isp.serial_sleep = isp.settings.serial_sleep_no_echo
     isp.SetBaudRate(baudrate)
     isp.baud_rate = baudrate
-    time.sleep(max(0.1, sleep_time))
-    time.sleep(max(0.1, sleep_time))
+    time.sleep(isp.settings.set_baudrate_sleep)
     isp.reset()
     part_id = isp.ReadPartID()
 
@@ -949,6 +947,7 @@ def SetupChip(
     _log.debug("Setting new baudrate %d" % baudrate)
     isp.SetBaudRate(baudrate)  # set the chips baudrate
     isp.baud_rate = baudrate  # change the driver baudrate
+    time.sleep(isp.settings.set_baudrate_sleep)
     return isp, chip
 
 
