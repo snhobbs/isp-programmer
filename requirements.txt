@@ -1,0 +1,8 @@
+pyserial
+pymodbus
+pandas
+intelhex
+numpy
+click
+pycrc
+pandas
