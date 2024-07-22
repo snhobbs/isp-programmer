@@ -8,8 +8,6 @@ import typing
 from typing import Deque
 from collections import deque
 
-# import timeout_decorator
-# from timeout_decorator import timeout
 from intelhex import IntelHex
 from .IODevices import IODevice, UartDevice
 from .parts_definitions import GetPartDescriptor
@@ -173,7 +171,6 @@ class ISPConnection:
     def _flush(self):
         self.iodevice.flush()
 
-    # @timeout(kTimeout)
     def _read_line(self) -> str:
         """
         Read until a new line is found.
@@ -287,7 +284,6 @@ class ISPConnection:
         self._write(data)  # Stream data after confirmation
         # Ignore response, it's not reliable
 
-    # @timeout(10)
     def ReadMemory(self, start: int, num_bytes: int):
         """
         Send command with newline, receive response code\r\n<data>
