@@ -122,6 +122,16 @@ class ISPConnection:
         self.echo_on = True
         self.settings = settings
 
+    def disconnect(self):
+        try:
+            self.iodevice.disconnect()
+            del self.iodevice
+        except AttributeError:
+            pass
+
+    def __del__(self):
+        self.disconnect()
+
     @property
     def serial_sleep(self):
         return self.settings.serial_sleep
@@ -918,36 +928,40 @@ def SetupChip(
     + Reads the chip ID and returns the matching chip description
     """
 
-    kStartingBaudRate = BAUDRATES[0]
-    if no_sync:
-        kStartingBaudRate = baudrate
+    try:
+        kStartingBaudRate = BAUDRATES[0]
+        if no_sync:
+            kStartingBaudRate = baudrate
 
-    _log.debug("Using baud rate %d", kStartingBaudRate)
-    iodevice: UartDevice = UartDevice(device, baudrate=kStartingBaudRate)
-    isp = ISPConnection(iodevice, settings=settings)
-    isp.reset()
-    # print(baudrate, device, crystal_frequency, chip_file)
+        _log.debug("Using baud rate %d", kStartingBaudRate)
+        iodevice: UartDevice = UartDevice(device, baudrate=kStartingBaudRate)
+        isp = ISPConnection(iodevice, settings=settings)
+        isp.reset()
+        # print(baudrate, device, crystal_frequency, chip_file)
 
-    if not no_sync:
-        isp.SyncConnection()
+        if not no_sync:
+            isp.SyncConnection()
 
-    isp.SetEcho(False)
-    isp.serial_sleep = isp.settings.serial_sleep_no_echo
-    isp.SetBaudRate(baudrate)
-    isp.baud_rate = baudrate
-    time.sleep(isp.settings.set_baudrate_sleep)
-    isp.reset()
-    part_id = isp.ReadPartID()
+        isp.SetEcho(False)
+        isp.serial_sleep = isp.settings.serial_sleep_no_echo
+        isp.SetBaudRate(baudrate)
+        isp.baud_rate = baudrate
+        time.sleep(isp.settings.set_baudrate_sleep)
+        isp.reset()
+        part_id = isp.ReadPartID()
 
-    descriptor: dict[str, str] = GetPartDescriptor(chip_file, part_id)
-    _log.debug(f"{part_id}, {descriptor}")
-    chip = ChipDescription(descriptor)
-    chip.CrystalFrequency = crystal_frequency
+        descriptor: dict[str, str] = GetPartDescriptor(chip_file, part_id)
+        _log.debug(f"{part_id}, {descriptor}")
+        chip = ChipDescription(descriptor)
+        chip.CrystalFrequency = crystal_frequency
 
-    _log.debug("Setting new baudrate %d" % baudrate)
-    isp.SetBaudRate(baudrate)  # set the chips baudrate
-    isp.baud_rate = baudrate  # change the driver baudrate
-    time.sleep(isp.settings.set_baudrate_sleep)
+        _log.debug("Setting new baudrate %d" % baudrate)
+        isp.SetBaudRate(baudrate)  # set the chips baudrate
+        isp.baud_rate = baudrate  # change the driver baudrate
+        time.sleep(isp.settings.set_baudrate_sleep)
+    except UserWarning:
+        iodevice.disconnect()
+        raise
     return isp, chip
 
 

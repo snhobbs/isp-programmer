@@ -1,6 +1,9 @@
+import logging
 from serial import Serial
 
 kTimeout = 1
+
+_log = logging.getLogger("isp_programmer")
 
 
 class IODevice:
@@ -27,6 +30,9 @@ class IODevice:
     def ReadLine(self):
         pass
 
+    def disconnect(self):
+        pass
+
 
 class MockUart(IODevice):
     """Mock IO device for testing"""
@@ -34,6 +40,9 @@ class MockUart(IODevice):
     def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 9600):
         self.baudrate = baudrate
         self.port = port
+
+    def disconnect(self):
+        pass
 
     def read_byte(self):
         return 0x00
@@ -57,7 +66,19 @@ class UartDevice(IODevice):
         baudrate: int = 9600,
         timeout: float = kTimeout,
     ):
+        _log.debug("connect serial")
         self.uart = Serial(port, baudrate, xonxoff=False, timeout=timeout)
+
+    def disconnect(self):
+        _log.debug("disconnect serial")
+        try:
+            self.uart.close()
+            del self.uart
+        except AttributeError:
+            pass
+
+    def __del__(self):
+        self.disconnect()
 
     def read(self, *args, **kwargs):
         return self.uart.read(*args, **kwargs)

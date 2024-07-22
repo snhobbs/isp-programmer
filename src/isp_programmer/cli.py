@@ -81,8 +81,6 @@ def cli_MassErase(ctx):
         ctx.obj["crystal_frequency"],
         ctx.obj["config_file"],
         ctx.obj["no_sync"],
-        ctx.obj["sleep_time"],
-        serial_sleep=ctx.obj["serial_sleep"],
     )
     MassErase(isp, chip)
     _log.info("Mass Erase Successful")
@@ -103,8 +101,6 @@ def cli_WriteFlash(ctx, imagein, start_sector):
         ctx.obj["crystal_frequency"],
         ctx.obj["config_file"],
         ctx.obj["no_sync"],
-        ctx.obj["sleep_time"],
-        serial_sleep=ctx.obj["serial_sleep"],
     )
     image = read_image_file_to_bin(imagein)
     WriteBinaryToFlash(isp=isp, chip=chip, image=image, start_sector=start_sector)
@@ -122,8 +118,6 @@ def cli_WriteImage(ctx, imagein):
         ctx.obj["crystal_frequency"],
         ctx.obj["config_file"],
         ctx.obj["no_sync"],
-        ctx.obj["sleep_time"],
-        serial_sleep=ctx.obj["serial_sleep"],
     )
     image = read_image_file_to_bin(imagein)
     WriteImage(isp, chip, image)
@@ -142,8 +136,6 @@ def cli_FastWriteImage(ctx, imagein):
         ctx.obj["crystal_frequency"],
         ctx.obj["config_file"],
         ctx.obj["no_sync"],
-        ctx.obj["sleep_time"],
-        serial_sleep=ctx.obj["serial_sleep"],
     )
     image = read_image_file_to_bin(imagein)
     image_read = ReadImage(isp, chip)[: len(image)]
@@ -164,8 +156,6 @@ def cli_ReadImage(ctx, imageout: str):
         ctx.obj["crystal_frequency"],
         ctx.obj["config_file"],
         ctx.obj["no_sync"],
-        ctx.obj["sleep_time"],
-        serial_sleep=ctx.obj["serial_sleep"],
     )
     image = ReadImage(isp, chip)
     _log.debug(image)
