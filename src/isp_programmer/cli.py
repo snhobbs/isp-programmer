@@ -44,6 +44,7 @@ def gr1(ctx, **kwargs):
     ctx.ensure_object(dict)
     ctx.obj.update(kwargs)
 
+    logging.basicConfig()
     level = logging.INFO
     if kwargs["debug"]:
         level = logging.DEBUG

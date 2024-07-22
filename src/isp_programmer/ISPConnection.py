@@ -16,7 +16,7 @@ from . import tools
 
 _log = logging.getLogger("isp_programmer")
 
-kTimeout = 1
+kTimeout = 0.1
 
 
 BAUDRATES = (9600, 19200, 38400, 57600, 115200, 230400, 460800)
@@ -174,7 +174,7 @@ class ISPConnection:
     def _read_line(self) -> str:
         """
         Read until a new line is found.
-        Timesout if no data pulled
+        Times out if no data pulled
         """
         line = self.iodevice.ReadLine()
         return line
@@ -204,7 +204,7 @@ class ISPConnection:
 
     def _get_return_code(self, command_string: str) -> int:
         """
-        No exceptions are thrown.
+        No exceptions are thrown. Expects echo to be turned on
         """
         time.sleep(self.settings.return_code_sleep)
         try:
@@ -222,7 +222,7 @@ class ISPConnection:
             return self.ReturnCodes["NoStatusResponse"]
 
         _log.debug("%s: %s", command_string, resp)
-        return int(resp.strip())
+        return int(resp)
 
     def _write(self, string: bytes) -> None:
         _log.debug(string)
@@ -253,9 +253,13 @@ class ISPConnection:
 
     def SetBaudRate(self, baud_rate: int, stop_bits: int = 1):
         """
-        Baud Depends of FAIM config, stopbit is 1 or 2
+        Baud Depends of FAIM config, stopbit is 1 or 2. This can
+        take a few tries to work at bootup.
         """
-        response_code = self._write_command(f"B {baud_rate} {stop_bits}")
+        for _ in range(5):
+            response_code = self._write_command(f"B {baud_rate} {stop_bits}")
+            if response_code == 0:
+                break
         _raise_return_code_error(response_code, "Set Baudrate")
 
     def SetEcho(self, on: bool = True):
@@ -424,9 +428,6 @@ class ISPConnection:
         return _return_code_success(response_code)
 
     def ReadUID(self):
-        """
-        Raises timeout exception
-        """
         response_code = self._write_command("N")
         _raise_return_code_error(response_code, "Read UID")
         uuids = []
@@ -496,10 +497,16 @@ class ISPConnection:
         sync_char = "?"
         # > ?\n
         self._write(bytes(sync_char, "utf-8"))
-        byte_in = self.iodevice.read()
+        byte_in = self.iodevice.read().strip().decode("utf-8")
+        _log.debug("Recieved: %s", byte_in)
+        assert isinstance(byte_in, str)
+        assert isinstance(sync_char, str)
         if byte_in == sync_char:
             # already syncronized
             _log.info("Already synchronized")
+            self._write(bytes("\n", "utf-8"))
+            time.sleep(0.01)
+            self.reset()
             return
 
         try:
@@ -589,8 +596,8 @@ class ChipDescription:
         self.RAMBufferSize = int(descriptor.pop("RAMBufferSize"))
         self.SectorCount: int = int(descriptor.pop("SectorCount"))
         self.RAMStartWrite: int = int(descriptor.pop("RAMStartWrite"))
-        self.CrystalFrequency = 12000  # khz == 30MHz
-        self.kCheckSumLocation = 7  # 0x0000001c
+        self.CrystalFrequency: int = 12000  # khz == 30MHz
+        self.kCheckSumLocation: int = 7  # 0x0000001c
 
         assert self.RAMRange[0] > 0
         assert self.RAMRange[1] > self.RAMRange[0]
