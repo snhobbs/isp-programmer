@@ -85,7 +85,7 @@ def _raise_return_code_error(code: int, call_name: str) -> None:
 
 @dataclass
 class Settings:
-    safe_write: bool = True
+    safe_write: bool = True # Check to see if sector is already equal to RAM, if so skip
     flash_write_sleep: float = 0.01
     ram_write_sleep: float = 0.01
     return_code_sleep: float = 0.05
