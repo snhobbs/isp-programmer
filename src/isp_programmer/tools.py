@@ -1,9 +1,6 @@
 import math
-import logging
-import functools
 import zlib
 from pycrc.algorithms import Crc
-import timeout_decorator
 
 
 def collection_to_string(arr):
@@ -36,31 +33,6 @@ def Crc32(frame: bytes) -> int:
 def calc_crc(frame: bytes):
     return zlib.crc32(frame, 0)
     # return Crc32(frame)
-
-
-def retry(
-    _func=None, *, count=2, exception=timeout_decorator.TimeoutError, raise_on_fail=True
-):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            value = None
-            for i in range(1, count + 1):
-                try:
-                    assert func
-                    value = func(*args, **kwargs)
-                    break
-                except exception as e:
-                    logging.warning(f"{type(e)}->{e}: Retry {i}/{count}")
-                    if i >= count and raise_on_fail:
-                        raise UserWarning(f"{_func} retry exceeded {count}")
-            return value
-
-        return wrapper
-
-    if _func is None:
-        return decorator
-    return decorator(_func)
 
 
 def calc_sector_count(image, sector_bytes):
