@@ -498,7 +498,7 @@ class ISPConnection:
         self._write(bytes(sync_char, "utf-8"))
         byte_in = self.iodevice.read()
         if byte_in == sync_char:
-            # already syncronized
+            # already synchronized
             _log.info("Already synchronized")
             return
 
@@ -514,8 +514,8 @@ class ISPConnection:
         )
 
         if not valid_response:
-            _log.error("Syncronization Failure")
-            raise UserWarning("Syncronization Failure")
+            _log.error("Synchronization Failure")
+            raise UserWarning("Synchronization Failure")
 
         # self._flush()
         _log.debug(f"Echoing sync string, {repr(self.SyncStringBytes)}")
@@ -547,7 +547,7 @@ class ISPConnection:
         if self.SyncVerifiedString.strip() not in frame_in:
             _log.error("Verification Failure")
             raise UserWarning("Verification Failure")
-        _log.info("Syncronization Successful")
+        _log.info("Synchronization Successful")
 
         self._write(bytes(self.kNewLine, encoding="utf-8"))
         self.reset()
