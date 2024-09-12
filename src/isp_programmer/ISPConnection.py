@@ -174,7 +174,7 @@ class ISPConnection:
     def _read_line(self) -> str:
         """
         Read until a new line is found.
-        Timesout if no data pulled
+        Times out if no data pulled
         """
         line = self.iodevice.ReadLine()
         return line
@@ -302,7 +302,7 @@ class ISPConnection:
             _log.debug(f"{function}: bytes in {len(self.data_buffer_in)}/{num_bytes}")
             time.sleep(0.1)
             self._read()
-        # Command success is sent at the end of the transferr
+        # Command success is sent at the end of the transfer
         data = []
         while self.data_buffer_in:
             ch = self.data_buffer_in.popleft()
@@ -482,11 +482,11 @@ class ISPConnection:
         1. Send a ?
         2. Receive "Synchronized"
         3. Return "Synchronized"
-        4. Recieve "OK"
+        4. Receive "OK"
 
         If the chip is started from reset this will work.
         If too many characters that are not a ? are received then the chip will need to be
-        reset. If a couple garbage characters are picked then the chip will still sychronize if the
+        reset. If a couple garbage characters are picked then the chip will still synchronize if the
         serial buffer is overflowed. Therefore try sending a single '?' and checking for the response.
         Otherwise send another '?' at a time until a response comes back or n number of characters have
         been sent.
@@ -830,7 +830,7 @@ def WriteBinaryToFlash(
     assert chip.FlashAddressLegal(chip.FlashRange[0]) and chip.FlashAddressLegal(
         chip.FlashRange[1]
     )
-    """  Flash signature reading is only supported for some chips and is partially impimented for others.
+    """  Flash signature reading is only supported for some chips and is partially implemented for others.
     time.sleep(0.5)
     chip_flash_sig = isp.ReadFlashSig(chip.FlashRange[0], chip.FlashRange[1])
     _log.info(f"Flash Signature: {chip_flash_sig}")
