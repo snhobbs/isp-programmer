@@ -21,6 +21,7 @@ url='https://github.com/snhobbs/NXPISP'
 [project.scripts]
 isp_programmer = "isp_programmer.cli:main"
 ISPProgrammer = "isp_programmer.cli:main"
+isp-programmer-gui = "isp_programmer.gui:main"
 
 [tool.setuptools]
 include-package-data = true
