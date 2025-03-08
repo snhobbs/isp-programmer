@@ -16,11 +16,7 @@ from . import tools
 _log = logging.getLogger("isp_programmer")
 
 kTimeout = 1
-
-
 BAUDRATES = (9600, 19200, 38400, 57600, 115200, 230400, 460800)
-
-
 NXPReturnCodes = {
     "CMD_SUCCESS": 0x0,
     "INVALID_COMMAND": 0x1,
@@ -82,7 +78,8 @@ def _raise_return_code_error(code: int, call_name: str) -> None:
 
 @dataclass
 class Settings:
-    safe_write: bool = True # Check to see if sector is already equal to RAM, if so skip
+    # Check to see if sector is already equal to RAM, if so skip
+    safe_write: bool = True
     flash_write_sleep: float = 0.01
     ram_write_sleep: float = 0.01
     return_code_sleep: float = 0.05
@@ -100,7 +97,7 @@ class ISPConnection:
 
     kNewLine = "\r\n"
     StatusRespLength = len(kNewLine) + 1
-    kWordSize = 4  #  32 bit device
+    kWordSize = 4
     # Parity = None
     # DataBits = 8
     # StopBits = 1
@@ -211,7 +208,8 @@ class ISPConnection:
             if resp.strip() == command_string.strip():
                 _log.debug("Command was echoed, Discarding line: %s", resp)
                 resp = self._read_line()
-            # if self.echo_on:  # discard echo
+            # discard echo
+            # if self.echo_on:
             #    _log.debug("ECHO ON, Discarding line: %s", resp)
             #    resp = self._read_line()
         except TimeoutError:
@@ -265,7 +263,7 @@ class ISPConnection:
         """
         ISP echos host when enabled
         """
-        command = f"A {on : d}"
+        command = f"A {on:d}"
         response_code = self._write_command(command)
         _raise_return_code_error(response_code, "Set Echo")
         self.echo_on = on
@@ -284,14 +282,18 @@ class ISPConnection:
         # when transfer is complete the handler sends OK<CR><LF>
         response_code = self._write_command(f"W {start} {len(data)}")
         _raise_return_code_error(response_code, function_name)
-        self._write(data)  # Stream data after confirmation
+
+        # Stream data after confirmation
+        self._write(data)
         # Ignore response, it's not reliable
 
     def ReadMemory(self, start: int, num_bytes: int):
         """
         Send command with newline, receive response code\r\n<data>
         """
-        assert num_bytes % self.kWordSize == 0  #  On a word boundary
+
+        #  On a word boundary
+        assert num_bytes % self.kWordSize == 0
         function = "ReadMemory"
         command = f"R {start} {num_bytes}"
 
@@ -337,9 +339,9 @@ class ISPConnection:
         if thumb_mode:
             mode = "T"
         response_code = self._write_command(f"G {address} {mode}")
-        if (
-            response_code != self.ReturnCodes["NoStatusResponse"]
-        ):  #  Don't expect a response code from this
+
+        #  Don't expect a response code from this
+        if response_code != self.ReturnCodes["NoStatusResponse"]:
             _raise_return_code_error(response_code, "Go")
 
     def EraseSector(self, start: int, end: int):
@@ -467,7 +469,8 @@ class ISPConnection:
         verified = False
         for _ in range(3):
             try:
-                frame_in = self._read_line()  # Should be OK\r\n
+                frame_in = self._read_line()
+                # Should be OK\r\n
                 if self.SyncVerifiedString in frame_in:
                     verified = True
                     break
@@ -526,7 +529,7 @@ class ISPConnection:
         # self._flush()
         _log.debug(f"Echoing sync string, {repr(self.SyncStringBytes)}")
         time.sleep(0.1)
-        self._write(self.SyncStringBytes)  # echo SyncString
+        self._write(self.SyncStringBytes)
         self.write_newline()
         self.write_newline()
         # > Synchronized\n
@@ -575,7 +578,7 @@ class ChipDescription:
     Wraps a chip description line and exposes it as a class
     """
 
-    kWordSize = 4  #  32 bit
+    kWordSize = 4
     kPageSizeBytes = 64
     SectorSizePages = 16
     CRCLocation = 0x000002FC
@@ -595,14 +598,13 @@ class ChipDescription:
         self.RAMBufferSize = int(descriptor.pop("RAMBufferSize"))
         self.SectorCount: int = int(descriptor.pop("SectorCount"))
         self.RAMStartWrite: int = int(descriptor.pop("RAMStartWrite"))
-        self.CrystalFrequency: int = 12000  # khz == 30MHz
-        self.kCheckSumLocation: int = 7  # 0x0000001c
+        self.CrystalFrequency = 12000
+        # 0x0000001c
+        self.kCheckSumLocation = 7
 
         assert self.RAMRange[0] > 0
         assert self.RAMRange[1] > self.RAMRange[0]
-
         assert self.FlashRange[1] > self.FlashRange[0]
-
         assert self.SectorCount > 0
 
     @property
@@ -644,9 +646,7 @@ class ChipDescription:
 
 # Script tools
 
-assert (
-    tools.calc_crc(bytes([0xFF] * 1024)) == 3090874356
-)  #  Check the software crc algorithm
+assert tools.calc_crc(bytes([0xFF] * 1024)) == 3090874356
 
 
 def RemoveBootableCheckSum(vector_table_loc: int, image: bytes) -> bytes:
@@ -673,7 +673,8 @@ def GetCheckSumedVectorTable(vector_table_loc: int, orig_image: bytes) -> bytes:
 
     # calculate the checksum over the interrupt vectors
     intvecs_list = list(intvecs[:vector_table_size])
-    intvecs_list[vector_table_loc] = 0  # clear csum value
+    # clear csum value
+    intvecs_list[vector_table_loc] = 0
     csum = tools.CalculateCheckSum(intvecs_list)
     intvecs_list[vector_table_loc] = csum
     vector_table_bytes = b""
@@ -684,7 +685,6 @@ def GetCheckSumedVectorTable(vector_table_loc: int, orig_image: bytes) -> bytes:
 
 def MakeBootable(vector_table_loc: int, orig_image: bytes) -> bytes:
     vector_table_bytes = GetCheckSumedVectorTable(vector_table_loc, orig_image)
-
     image = vector_table_bytes + orig_image[len(vector_table_bytes) :]
     return image
 
@@ -797,7 +797,8 @@ def WriteFlashSector(
 def WriteSector(isp: ISPConnection, chip: ChipDescription, sector: int, data: bytes):
     assert len(data) > 0
 
-    if len(data) != chip.sector_bytes:  #  Fill data buffer to match write size
+    #  Fill data buffer to match write size
+    if len(data) != chip.sector_bytes:
         data += bytes([0xFF] * (chip.sector_bytes - len(data)))
     WriteFlashSector(isp, chip, sector, data)
 
@@ -826,10 +827,9 @@ def WriteBinaryToFlash(
     isp.Unlock()
     for sector in reversed(range(start_sector, start_sector + sector_count)):
         _log.info(f"\nWriting Sector {sector} / {sector_count}")
-        data_chunk = image[
-            (sector - start_sector) * chip.sector_bytes : (sector - start_sector + 1)
-            * chip.sector_bytes
-        ]
+        start = (sector - start_sector) * chip.sector_bytes
+        end = (sector - start_sector + 1) * chip.sector_bytes
+        data_chunk = image[start:end]
         WriteSector(isp, chip, sector, data_chunk)
         time.sleep(isp.settings.flash_write_sleep)
 

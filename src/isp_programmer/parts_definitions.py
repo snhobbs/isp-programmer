@@ -3,9 +3,6 @@ Parser for the lpctools file, read into a data frame that is
 consistent with other formats
 """
 
-import pandas
-import numpy as np
-
 column_names = [
     "part id",
     "name",
@@ -55,20 +52,23 @@ def read_lpcparts_string(string: str) -> dict[str, list]:
             except ValueError:
                 df_dict[column].append(read)
 
-    for col in df_dict:
-        df_dict[col] = np.array(df_dict[col])
-
-    df = pandas.DataFrame(df_dict)
-    df["RAMEnd"] = np.array(df["RAMStart"]) + np.array(df["RAMSize"]) - 1
-    df["FlashEnd"] = np.array(df["FlashStart"]) + np.array(df["FlashSize"]) - 1
-    df["RAMStartWrite"] = np.array(df["RAMStart"]) + np.array(df["RAMBufferOffset"])
+    df = df_dict
+    df["RAMEnd"] = [
+        start + size - 1 for start, size in zip(df["RAMStart"], df["RAMSize"])
+    ]
+    df["FlashEnd"] = [
+        start + size - 1 for start, size in zip(df["FlashStart"], df["FlashSize"])
+    ]
+    df["RAMStartWrite"] = [
+        start + offset for start, offset in zip(df["RAMStart"], df["RAMBufferOffset"])
+    ]
 
     df["RAMRange"] = list(zip(df["RAMStart"], df["RAMEnd"]))
     df["FlashRange"] = list(zip(df["FlashStart"], df["FlashEnd"]))
     return df
 
 
-def ReadChipFile(fname: str) -> pandas.DataFrame:
+def ReadChipFile(fname: str) -> dict:
     """
     Reads an lpcparts style file to a dataframe
     """
@@ -79,9 +79,9 @@ def ReadChipFile(fname: str) -> pandas.DataFrame:
 
 def GetPartDescriptorLine(fname: str, partid: int) -> dict[str, str]:
     entries = ReadChipFile(fname)
-    for _, entry in entries.iterrows():
-        if partid == entry["part id"]:
-            return entry
+    for i, line_part_id in enumerate(entries["part id"]):
+        if partid == line_part_id:
+            return {key: entries[key][i] for key in entries}
     raise UserWarning(f"PartId {partid} not found in {fname}")
 
 

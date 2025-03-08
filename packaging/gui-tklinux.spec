@@ -6,8 +6,6 @@ binaries = []
 hiddenimports = []
 tmp_ret = collect_all('isp_programmer')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('pyserial')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('serial')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
@@ -23,7 +21,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[],
     noarchive=False,
-    optimize=0,
+    optimize=2,
 )
 pyz = PYZ(a.pure)
 
@@ -36,8 +34,8 @@ exe = EXE(
     name='isp-programmer',
     debug=False,
     bootloader_ignore_signals=False,
-    #strip=False,
-    strip=True,
+    strip=False,
+    #strip=True,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
