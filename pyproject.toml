@@ -14,6 +14,15 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 
+dependencies = [
+    "pyserial>=3.5",
+    "intelhex>=2.3.0",
+    "pycrc>=0.10.0",
+    "click>=8.0.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0"
+]
+
 [project.urls]
 repository='https://github.com/snhobbs/NXPISP'
 url='https://github.com/snhobbs/NXPISP'
@@ -28,9 +37,6 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src", "src/isp_programmer"]
-
-[tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
 
 [build-system]
 requires = [
