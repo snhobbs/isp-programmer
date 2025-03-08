@@ -1,6 +1,6 @@
 """
 Parser for the lpctools file, read into a data frame that is
-consitant with other formats
+consistent with other formats
 """
 
 import pandas
@@ -86,7 +86,7 @@ def GetPartDescriptorLine(fname: str, partid: int) -> dict[str, str]:
 
 
 def GetPartDescriptor(fname: str, partid: int) -> dict[str, str]:
-    # FIXME redundent function
+    # FIXME redundant function
     descriptor = GetPartDescriptorLine(fname, partid)
     if descriptor is None:
         raise UserWarning("Warning chip %s not found in file %s" % (hex(partid), fname))

@@ -82,7 +82,7 @@ def _raise_return_code_error(code: int, call_name: str) -> None:
 
 @dataclass
 class Settings:
-    safe_write: bool = True
+    safe_write: bool = True # Check to see if sector is already equal to RAM, if so skip
     flash_write_sleep: float = 0.01
     ram_write_sleep: float = 0.01
     return_code_sleep: float = 0.05
@@ -305,7 +305,7 @@ class ISPConnection:
             _log.debug(f"{function}: bytes in {len(self.data_buffer_in)}/{num_bytes}")
             time.sleep(0.1)
             self._read()
-        # Command success is sent at the end of the transferr
+        # Command success is sent at the end of the transfer
         data = []
         while self.data_buffer_in:
             ch = self.data_buffer_in.popleft()
@@ -482,11 +482,11 @@ class ISPConnection:
         1. Send a ?
         2. Receive "Synchronized"
         3. Return "Synchronized"
-        4. Recieve "OK"
+        4. Receive "OK"
 
         If the chip is started from reset this will work.
         If too many characters that are not a ? are received then the chip will need to be
-        reset. If a couple garbage characters are picked then the chip will still sychronize if the
+        reset. If a couple garbage characters are picked then the chip will still synchronize if the
         serial buffer is overflowed. Therefore try sending a single '?' and checking for the response.
         Otherwise send another '?' at a time until a response comes back or n number of characters have
         been sent.
@@ -501,7 +501,7 @@ class ISPConnection:
         assert isinstance(byte_in, str)
         assert isinstance(sync_char, str)
         if byte_in == sync_char:
-            # already syncronized
+            # already synchronized
             _log.info("Already synchronized")
             self._write(bytes("\n", "utf-8"))
             time.sleep(0.01)
@@ -520,8 +520,8 @@ class ISPConnection:
         )
 
         if not valid_response:
-            _log.error("Syncronization Failure")
-            raise UserWarning("Syncronization Failure")
+            _log.error("Synchronization Failure")
+            raise UserWarning("Synchronization Failure")
 
         # self._flush()
         _log.debug(f"Echoing sync string, {repr(self.SyncStringBytes)}")
@@ -553,7 +553,7 @@ class ISPConnection:
         if self.SyncVerifiedString.strip() not in frame_in:
             _log.error("Verification Failure")
             raise UserWarning("Verification Failure")
-        _log.info("Syncronization Successful")
+        _log.info("Synchronization Successful")
 
         self._write(bytes(self.kNewLine, encoding="utf-8"))
         self.reset()
@@ -836,7 +836,7 @@ def WriteBinaryToFlash(
     assert chip.FlashAddressLegal(chip.FlashRange[0]) and chip.FlashAddressLegal(
         chip.FlashRange[1]
     )
-    """  Flash signature reading is only supported for some chips and is partially impimented for others.
+    """  Flash signature reading is only supported for some chips and is partially implemented for others.
     time.sleep(0.5)
     chip_flash_sig = isp.ReadFlashSig(chip.FlashRange[0], chip.FlashRange[1])
     _log.info(f"Flash Signature: {chip_flash_sig}")
