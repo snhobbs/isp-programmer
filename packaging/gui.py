@@ -150,6 +150,7 @@ class MyFrame(tk.Tk):
         self.title(title)
         self.geometry("{}x{}".format(*_frame_size))
         self.minsize(*_min_frame_size)
+        self.sync_mode = tk.BooleanVar(value=True)
 
         version_label = tk.Label(self, text=f"Version: {__version__}")
         version_label.pack(anchor=tk.E, padx=5, pady=5)
@@ -175,6 +176,20 @@ class MyFrame(tk.Tk):
             self, textvariable=self.com_choice, values=com_ports
         )
         self.com_choice_menu.pack(anchor=tk.W, padx=5, pady=5)
+
+        # Sync/No Sync Checkbutton
+        sync_label = tk.Label(self, text="Enable Sync:")
+        sync_label.pack(anchor=tk.W, padx=5, pady=5)
+
+        self.sync_checkbutton = tk.Checkbutton(
+            self,
+            text="Sync",
+            variable=self.sync_mode,
+            onvalue=True,  # Sync mode
+            offvalue=False,  # No Sync mode
+            # command=self.update_sync_mode,
+        )
+        self.sync_checkbutton.pack(anchor=tk.W, padx=5, pady=5)
 
         # Program ISP Button
         self.run_isp_button = tk.Button(
@@ -237,7 +252,12 @@ class MyFrame(tk.Tk):
 
         bin_file = self.file_picker.get()
         self.update_text(f"Starting task. Device {com_choice}, Bin {bin_file}\n")
-        command = functools.partial(program_isp_task, image=bin_file, device=com_choice)
+        command = functools.partial(
+            program_isp_task,
+            image=bin_file,
+            device=com_choice,
+            no_sync=(not self.sync_mode.get()),
+        )
 
         msg = f"programming {bin_file}, {com_choice}"
         _log.debug(msg)
