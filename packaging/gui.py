@@ -13,7 +13,7 @@ import serial
 import serial.tools.list_ports
 import isp_programmer.cli
 
-__version__ = "v0.2.0"
+__version__ = "v1.2.1"
 
 _log = logging.getLogger("isp_programmer_gui")
 _min_frame_size = (200, 300)

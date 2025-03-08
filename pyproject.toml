@@ -1,6 +1,6 @@
 [project]
 name = "isp_programmer"
-version = "1.2.0"
+version = "1.2.1"
 description='NXP ISP Cortex-M programming tool'
 authors = [
     {name = "Simon Hobbs", email = "simon.hobbs@electrooptical.net"},
