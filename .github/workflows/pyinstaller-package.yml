@@ -37,6 +37,6 @@ jobs:
     - name: Make executable
       uses: sayyid5416/pyinstaller@v1
       with:
-        spec: 'packaging/gui-tklinux.spec'
+        spec: 'packaging/gui-tk.spec'
         upload_exe_with_name: 'isp-programmer-${{ matrix.os }}'
         python_ver: '3.9'
