@@ -5,7 +5,7 @@ import logging
 import struct
 from dataclasses import dataclass
 import typing
-from typing import Deque
+from typing import Deque, Union
 from collections import deque
 
 from intelhex import IntelHex
@@ -107,7 +107,7 @@ class ISPConnection:
     # SyncVerifiedBytes = bytes(SyncVerifiedString, encoding="utf-8")
     ReturnCodes = NXPReturnCodes
 
-    def __init__(self, iodevice: IODevice, settings: Settings | None = None):
+    def __init__(self, iodevice: IODevice, settings: Union[Settings, None] = None):
         if settings is None:
             settings = Settings()
 
@@ -911,7 +911,7 @@ def SetupChip(
     crystal_frequency: int,
     chip_file: str,
     no_sync: bool = False,
-    settings: Settings | None = None,
+    settings: Union[Settings, None] = None,
 ):
     """
     :param int baudrate: The baudrate to set or use. If no_sync is True this baudrate is assumed to already be set
