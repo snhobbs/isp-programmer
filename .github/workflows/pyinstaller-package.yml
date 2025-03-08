@@ -2,9 +2,8 @@ name: Pyinstaller package
 
 on:
   push:
-    branches: [ master, feature ]
-  pull_request:
-    branches: [ master ]
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -40,3 +39,29 @@ jobs:
         spec: 'packaging/gui-tk.spec'
         upload_exe_with_name: 'isp-programmer-${{ matrix.os }}'
         python_ver: '3.9'
+
+  release:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, windows-latest]
+
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed to create a release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: 'isp-programmer-${{ matrix.os }}'
+          path: output
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output/*
+          token: ${{ secrets.GITHUB_TOKEN }}
