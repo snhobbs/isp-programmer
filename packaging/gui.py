@@ -142,6 +142,20 @@ def program_isp_task(
     isp.Go(0)
 
 
+def erase_task(
+    device, output_queue, baud=115200, crystal_frequency=12000, no_sync=False
+):
+    setup_log_handler(_log, output_queue)
+    isp, chip = isp_programmer.cli.SetupChip(
+        baud,
+        device,
+        crystal_frequency,
+        isp_programmer.cli._chip_defs,
+        no_sync,
+    )
+    isp_programmer.cli.MassErase(isp, chip)
+
+
 class MyFrame(tk.Tk):
     def __init__(self, parent, title):
         super().__init__()
@@ -191,11 +205,15 @@ class MyFrame(tk.Tk):
         )
         self.sync_checkbutton.pack(anchor=tk.W, padx=5, pady=5)
 
-        # Program ISP Button
+        # program isp button
         self.run_isp_button = tk.Button(
             self, text="Program", command=self.on_run_program_isp
         )
         self.run_isp_button.pack(pady=10)
+
+        # erase isp button
+        self.run_erase_button = tk.Button(self, text="Erase", command=self.on_run_erase)
+        self.run_erase_button.pack(pady=10)
 
         # Cancel Button
         self.run_button = tk.Button(self, text="Cancel", command=self.on_cancel)
@@ -231,6 +249,33 @@ class MyFrame(tk.Tk):
     def on_cancel(self):
         if self.worker_thread is not None and self.worker_thread.is_alive():
             self.worker_thread.kill()
+
+    def on_run_erase(self):
+        """Function of a never-ending program writing to terminal"""
+        if self.worker_thread is not None and self.worker_thread.is_alive():
+            messagebox.showerror("Error", "Thread Already Running")
+            return
+
+        errors = self.get_validation_errors()
+
+        if len(errors):
+            messagebox.showerror("Validation Error", "\n".join(errors))
+            return
+
+        com_choice = self.com_choice.get()
+        self.update_text(f"Starting task. Device {com_choice}\n")
+        command = functools.partial(
+            erase_task,
+            device=com_choice,
+            no_sync=(not self.sync_mode.get()),
+        )
+
+        self.terminal_output.configure(state=tk.NORMAL)
+        self.terminal_output.insert(
+            tk.END, "Starting Task, please wait...\nExpected to update in 45 seconds\n"
+        )
+        self.worker_thread = WorkerThread(command, self.queue, self.update_text)
+        self.worker_thread.start()
 
     def on_run_program_isp(self):
         """Function of a never-ending program writing to terminal"""

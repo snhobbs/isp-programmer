@@ -45,7 +45,7 @@ requires = [
 ]
 
 [tool.setuptools.package-data]
-isp_programmer= ["*.def", "*.ini"]
+isp_programmer= ["*.def", "*.ini", "src/isp_programmer/lpctools_parts.def"]
 
 [tool.pylint]
 max-line-length = 200
