@@ -15,7 +15,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "pyserial>=3.5",
+    "pyserial>=3.3",
     "intelhex>=2.3.0",
     "pycrc>=0.10.0",
     "click>=8.0.0",
