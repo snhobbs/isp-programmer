@@ -52,7 +52,7 @@ def gr1(ctx, **kwargs):
     _log.setLevel(level)
 
 
-@gr1.command("sync", help="Read the chip ID and boot code")
+@gr1.command("sync", help="Synchronize connection to chip")
 @click.pass_context
 def cli_sync(ctx):
     iodevice = UartDevice(ctx.obj["device"], baudrate=ctx.obj["baud"])
@@ -60,7 +60,7 @@ def cli_sync(ctx):
     isp.SyncConnection()
 
 
-@gr1.command("query-chip", help="Read the chip ID and boot code")
+@gr1.command("query-chip", help="Read chip Part ID, UID, and boot code version")
 @click.pass_context
 def cli_QueryChip(ctx):
     iodevice = UartDevice(ctx.obj["device"], baudrate=ctx.obj["baud"])
@@ -87,9 +87,7 @@ def cli_MassErase(ctx):
     _log.info("Mass Erase Successful")
 
 
-@click.option(
-    "--start_sector", type=int, default=0, required=True, help="Sector to write to"
-)
+@click.option("--start_sector", type=int, default=0, help="Sector to write to")
 @click.option(
     "--imagein", type=str, required=True, help="Location of hex file to program"
 )

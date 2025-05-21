@@ -3,6 +3,8 @@ Parser for the lpctools file, read into a data frame that is
 consistent with other formats
 """
 
+from typing import Dict, List
+
 column_names = [
     "part id",
     "name",
@@ -21,7 +23,7 @@ column_names = [
 ]
 
 
-def read_lpcparts_string(string: str) -> dict[str, list]:
+def read_lpcparts_string(string: str) -> Dict[str, List]:
     lpc_tools_column_locations = {
         "part id": 0,
         "name": 1,
@@ -77,28 +79,27 @@ def ReadChipFile(fname: str) -> dict:
     return df
 
 
-def GetPartDescriptorLine(fname: str, partid: int) -> dict[str, str]:
+def GetPartDescriptorLine(fname: str, partid: int) -> Dict[str, str]:
     entries = ReadChipFile(fname)
     for i, line_part_id in enumerate(entries["part id"]):
         if partid == line_part_id:
             return {key: entries[key][i] for key in entries}
-    raise UserWarning(f"PartId {partid} not found in {fname}")
+    raise ValueError(f"PartId {hex(partid)} not found in {fname}")
 
 
 def GetPartDescriptor(fname: str, partid: int) -> dict[str, str]:
     # FIXME redundant function
     descriptor = GetPartDescriptorLine(fname, partid)
-    if descriptor is None:
-        raise UserWarning("Warning chip %s not found in file %s" % (hex(partid), fname))
     return descriptor
 
 
 def check_parts_definition_dataframe(df):
     """
-    Takes the standard layout dataframe, check the field validity
+    Takes the standard layout dataframe, check the field validity.
+    Works with dict or DataFrame
     """
     valid = True
-    for _, line in df.iterrows():
-        if line["RAMRange"][1] - line["RAMRange"][0] + 1 != line["RAMSize"]:
+    for start, end, size in zip(df["RAMStart"], df["RAMEnd"], df["RAMSize"]):
+        if end - start + 1 != size:
             valid = False
     return valid
