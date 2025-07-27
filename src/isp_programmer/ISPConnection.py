@@ -5,7 +5,7 @@ import logging
 import struct
 from dataclasses import dataclass
 import typing
-from typing import Deque, Union
+from typing import Deque, Union, Dict
 from collections import deque
 
 from intelhex import IntelHex
@@ -578,11 +578,11 @@ class ChipDescription:
     Wraps a chip description line and exposes it as a class
     """
 
-    kWordSize = 4
-    kPageSizeBytes = 64
-    SectorSizePages = 16
-    CRCLocation = 0x000002FC
-    CRCValues = {
+    kWordSize: int = 4
+    kPageSizeBytes: int = 64
+    SectorSizePages: int = 16
+    CRCLocation: int = 0x000002FC
+    CRCValues: Dict[str, int] = {
         "NO_ISP": 0x4E697370,
         "CRP1": 0x12345678,
         "CRP2": 0x87654321,
@@ -957,7 +957,7 @@ def SetupChip(
         chip = ChipDescription(descriptor)
         chip.CrystalFrequency = crystal_frequency
 
-        _log.debug("Setting new baudrate %d" % baudrate)
+        _log.debug("Setting new baudrate %d", baudrate)
         isp.SetBaudRate(baudrate)  # set the chips baudrate
         isp.baud_rate = baudrate  # change the driver baudrate
         time.sleep(isp.settings.set_baudrate_sleep)
