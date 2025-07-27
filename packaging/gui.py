@@ -11,11 +11,11 @@ import threading
 import queue
 import serial
 import serial.tools.list_ports
-import isp_programmer.cli
+import ispprogrammer.cli
 
 __version__ = "v1.2.1"
 
-_log = logging.getLogger("isp_programmer_gui")
+_log = logging.getLogger("ispprogrammer_gui")
 _min_frame_size = (200, 300)
 _frame_size = (600, 800)
 
@@ -54,8 +54,8 @@ def setup_log_handler(log, output_queue, level=logging.INFO):
     log.setLevel(level)
     log.addHandler(handler)
 
-    logging.getLogger("isp_programmer").addHandler(handler)
-    logging.getLogger("isp_programmer").setLevel(logging.INFO)
+    logging.getLogger("ispprogrammer").addHandler(handler)
+    logging.getLogger("ispprogrammer").setLevel(logging.INFO)
 
 
 class WorkerThread(threading.Thread):
@@ -126,19 +126,19 @@ class FilePicker(tk.Frame):
         return self.file_path.get()
 
 
-def program_isp_task(
+def program_isptask(
     image, device, output_queue, baud=115200, crystal_frequency=12000, no_sync=False
 ):
     setup_log_handler(_log, output_queue)
-    isp, chip = isp_programmer.cli.SetupChip(
+    isp, chip = ispprogrammer.cli.SetupChip(
         baud,
         device,
         crystal_frequency,
-        isp_programmer.cli._chip_defs,
+        ispprogrammer.cli._chip_defs,
         no_sync,
     )
-    bin_ = isp_programmer.cli.read_image_file_to_bin(image)
-    isp_programmer.cli.WriteImage(isp, chip, bin_)
+    bin_ = ispprogrammer.cli.read_image_file_to_bin(image)
+    ispprogrammer.cli.WriteImage(isp, chip, bin_)
     isp.Go(0)
 
 
@@ -146,14 +146,14 @@ def erase_task(
     device, output_queue, baud=115200, crystal_frequency=12000, no_sync=False
 ):
     setup_log_handler(_log, output_queue)
-    isp, chip = isp_programmer.cli.SetupChip(
+    isp, chip = ispprogrammer.cli.SetupChip(
         baud,
         device,
         crystal_frequency,
-        isp_programmer.cli._chip_defs,
+        ispprogrammer.cli._chip_defs,
         no_sync,
     )
-    isp_programmer.cli.MassErase(isp, chip)
+    ispprogrammer.cli.MassErase(isp, chip)
 
 
 class MyFrame(tk.Tk):
@@ -206,10 +206,10 @@ class MyFrame(tk.Tk):
         self.sync_checkbutton.pack(anchor=tk.W, padx=5, pady=5)
 
         # program isp button
-        self.run_isp_button = tk.Button(
+        self.run_ispbutton = tk.Button(
             self, text="Program", command=self.on_run_program_isp
         )
-        self.run_isp_button.pack(pady=10)
+        self.run_ispbutton.pack(pady=10)
 
         # erase isp button
         self.run_erase_button = tk.Button(self, text="Erase", command=self.on_run_erase)
@@ -298,7 +298,7 @@ class MyFrame(tk.Tk):
         bin_file = self.file_picker.get()
         self.update_text(f"Starting task. Device {com_choice}, Bin {bin_file}\n")
         command = functools.partial(
-            program_isp_task,
+            program_isptask,
             image=bin_file,
             device=com_choice,
             no_sync=(not self.sync_mode.get()),
@@ -339,7 +339,7 @@ def main():
 
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     logging.basicConfig(format=log_format)
-    logging.getLogger("isp_programmer").setLevel(logging.DEBUG)
+    logging.getLogger("ispprogrammer").setLevel(logging.DEBUG)
     _log.setLevel(logging.INFO)
     app.mainloop()
 

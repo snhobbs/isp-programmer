@@ -46,7 +46,7 @@ The configuration file is identical to that used by the [lpctools project](http:
 ### From PyPI
 
 ```bash
-pip install isp_programmer
+pip install ispprogrammer
 ```
 
 ### From Source
@@ -62,17 +62,17 @@ pip install .
 ## Usage
 ### Erase Entire Flash
 ```bash
-isp_programmer --device /dev/ttyUSB0 -b 9600 -crystal_frequency 12000 masserase
+ispprogrammer --device /dev/ttyUSB0 -b 9600 -crystal_frequency 12000 masserase
 ```
 
 ### Program Flash Image
 ```bash
-isp_programmer --device /dev/ttyUSB0 -b 9600 -crystal_frequency 12000 writeimage --imagein blinky804.hex
+ispprogrammer --device /dev/ttyUSB0 -b 9600 -crystal_frequency 12000 writeimage --imagein blinky804.hex
 ```
 
 ### Read Chip Info
 ```bash
-isp_programmer --device /dev/ttyUSB0 -b 9600 -crystal_frequency 12000 querychip
+ispprogrammer --device /dev/ttyUSB0 -b 9600 -crystal_frequency 12000 querychip
 ```
 
 ## Similar Projects

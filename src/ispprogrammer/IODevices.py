@@ -3,7 +3,7 @@ from serial import Serial
 
 kTimeout = 1
 
-_log = logging.getLogger("isp_programmer")
+_log = logging.getLogger("ispprogrammer")
 
 
 class IODevice:

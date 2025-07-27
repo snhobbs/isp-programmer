@@ -1,5 +1,5 @@
 [project]
-name = "isp_programmer"
+name = "ispprogrammer"
 version = "1.2.1"
 description='NXP ISP Cortex-M programming tool'
 authors = [
@@ -22,19 +22,20 @@ dependencies = [
 ]
 
 [project.urls]
-repository='https://github.com/snhobbs/NXPISP'
-url='https://github.com/snhobbs/NXPISP'
+repository='https://github.com/snhobbs/isp-programmer'
+url='https://github.com/snhobbs/isp-programmer'
 
 [project.scripts]
-isp_programmer = "isp_programmer.cli:main"
-ISPProgrammer = "isp_programmer.cli:main"
-isp-programmer-gui = "isp_programmer.gui:main"
+ispprogrammer = "ispprogrammer.cli:main"
+ISPProgrammer = "ispprogrammer.cli:main"
+isp-programmer-gui = "ispprogrammer.gui:main"
+ispprogrammer-gui = "ispprogrammer.gui:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = ["src", "src/isp_programmer"]
+where = ["src", "src/ispprogrammer"]
 
 [build-system]
 requires = [
@@ -43,7 +44,7 @@ requires = [
 ]
 
 [tool.setuptools.package-data]
-isp_programmer= ["*.def", "*.ini", "src/isp_programmer/lpctools_parts.def"]
+ispprogrammer= ["*.def", "*.ini", "src/ispprogrammer/lpctools_parts.def"]
 
 [tool.pylint]
 max-line-length = 200

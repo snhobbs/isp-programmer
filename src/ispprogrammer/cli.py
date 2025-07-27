@@ -14,7 +14,7 @@ from .ISPConnection import (
 )
 
 
-_log = logging.getLogger("isp_programmer")
+_log = logging.getLogger("ispprogrammer")
 
 _chip_defs = os.path.join(os.path.dirname(__file__), "lpctools_parts.def")
 

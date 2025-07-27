@@ -31,7 +31,7 @@ jobs:
 
     - name: Verify Installations
       run: |
-        python3 -m pip show isp_programmer
+        python3 -m pip show ispprogrammer
         python3 -m pip show pyserial
 
     - name: Make executable
