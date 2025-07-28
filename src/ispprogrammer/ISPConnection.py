@@ -10,7 +10,7 @@ from collections import deque
 
 from intelhex import IntelHex
 from .IODevices import IODevice, UartDevice
-from .parts_definitions import GetPartDescriptor
+from .parts_definitions import get_part_descriptor
 from . import tools
 
 _log = logging.getLogger("ispprogrammer")
@@ -952,7 +952,7 @@ def SetupChip(
         isp.reset()
         part_id = isp.ReadPartID()
 
-        descriptor: dict[str, str] = GetPartDescriptor(chip_file, part_id)
+        descriptor: dict[str, str] = get_part_descriptor(chip_file, part_id)
         _log.debug(f"{part_id}, {descriptor}")
         chip = ChipDescription(descriptor)
         chip.CrystalFrequency = crystal_frequency
