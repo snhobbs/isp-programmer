@@ -1,105 +1,86 @@
-"""
-Parser for the lpctools file, read into a data frame that is
-consistent with other formats
-"""
-
-from typing import Dict, List
-
-column_names = [
-    "part id",
-    "name",
-    "FlashStart",
-    "FlashEnd",
-    "FlashSize",
-    "SectorCount",
-    "ResetVectorOffset",
-    "RAMStart",
-    "RAMEnd",
-    "RAMSize",
-    "RAMBufferOffset",
-    "RAMBufferSize",
-    "UU Encode",
-    "RAMStartWrite",
-]
+import csv
+from typing import List, Dict, Any
+from pathlib import Path
+from pydantic import BaseModel, Field, validator
 
 
-def read_lpcparts_string(string: str) -> Dict[str, List]:
-    lpc_tools_column_locations = {
-        "part id": 0,
-        "name": 1,
-        "FlashStart": 2,
-        "FlashSize": 3,
-        "SectorCount": 4,
-        "ResetVectorOffset": 5,
-        "RAMStart": 6,
-        "RAMSize": 7,
-        "RAMBufferOffset": 8,
-        "RAMBufferSize": 9,
-        "UU Encode": 10,
-    }
-    df_dict: dict[str, list] = {}
-    for column in lpc_tools_column_locations:
-        df_dict[column] = []
+class LPCPart(BaseModel):
+    part_id: int = Field(alias="part id")
+    name: str
+    FlashStart: int
+    FlashSize: int
+    SectorCount: int
+    ResetVectorOffset: int
+    RAMStart: int
+    RAMSize: int
+    RAMBufferOffset: int
+    RAMBufferSize: int
+    UU_Encode: str = Field(alias="UU Encode")
 
-    f = string.splitlines()
-    for line in f:
-        if not line.strip() or line.strip()[0] == "#":
+    @property
+    def RAMEnd(self) -> int:
+        return self.RAMStart + self.RAMSize - 1
+
+    @property
+    def FlashEnd(self) -> int:
+        return self.FlashStart + self.FlashSize - 1
+
+    @property
+    def RAMStartWrite(self) -> int:
+        return self.RAMStart + self.RAMBufferOffset
+
+    @property
+    def RAMRange(self) -> tuple[int, int]:
+        return (self.RAMStart, self.RAMEnd)
+
+    @property
+    def FlashRange(self) -> tuple[int, int]:
+        return (self.FlashStart, self.FlashEnd)
+
+    @validator("name", pre=True)
+    @classmethod
+    def strip_name(cls, v):
+        return v.strip()
+
+
+def parse_lpcparts_string(s: str) -> List[LPCPart]:
+    parts = []
+    reader = csv.reader(s.splitlines())
+    for row in reader:
+        if not row or row[0].strip().startswith("#"):
             continue
-        split_line = line.strip().split(",")
-        for column, index in lpc_tools_column_locations.items():
-            read = split_line[index].strip()
-            try:
-                value: int = int(read, 0)
-                df_dict[column].append(value)
-            except ValueError:
-                df_dict[column].append(read)
-
-    df = df_dict
-    df["RAMEnd"] = [
-        start + size - 1 for start, size in zip(df["RAMStart"], df["RAMSize"])
-    ]
-    df["FlashEnd"] = [
-        start + size - 1 for start, size in zip(df["FlashStart"], df["FlashSize"])
-    ]
-    df["RAMStartWrite"] = [
-        start + offset for start, offset in zip(df["RAMStart"], df["RAMBufferOffset"])
-    ]
-
-    df["RAMRange"] = list(zip(df["RAMStart"], df["RAMEnd"]))
-    df["FlashRange"] = list(zip(df["FlashStart"], df["FlashEnd"]))
-    return df
+        fields = {
+            "part id": int(row[0], 0),
+            "name": row[1].strip(),
+            "FlashStart": int(row[2], 0),
+            "FlashSize": int(row[3], 0),
+            "SectorCount": int(row[4], 0),
+            "ResetVectorOffset": int(row[5], 0),
+            "RAMStart": int(row[6], 0),
+            "RAMSize": int(row[7], 0),
+            "RAMBufferOffset": int(row[8], 0),
+            "RAMBufferSize": int(row[9], 0),
+            "UU Encode": row[10].strip(),
+        }
+        parts.append(LPCPart(**fields))
+    return parts
 
 
-def ReadChipFile(fname: str) -> dict:
-    """
-    Reads an lpcparts style file to a dataframe
-    """
-    with open(fname, "r") as f:
-        df = read_lpcparts_string(f.read())
-    return df
+def read_chip_file(fname: str) -> List[LPCPart]:
+    return parse_lpcparts_string(Path(fname).read_text())
 
 
-def GetPartDescriptorLine(fname: str, partid: int) -> Dict[str, str]:
-    entries = ReadChipFile(fname)
-    for i, line_part_id in enumerate(entries["part id"]):
-        if partid == line_part_id:
-            return {key: entries[key][i] for key in entries}
+def get_part_descriptor_line(fname: str, partid: int) -> LPCPart:
+    parts = read_chip_file(fname)
+    for part in parts:
+        if part.part_id == partid:
+            return part
     raise ValueError(f"PartId {hex(partid)} not found in {fname}")
 
 
-def GetPartDescriptor(fname: str, partid: int) -> dict[str, str]:
-    # FIXME redundant function
-    descriptor = GetPartDescriptorLine(fname, partid)
-    return descriptor
+def get_part_descriptor(fname: str, partid: int) -> Dict[str, Any]:
+    return get_part_descriptor_line(fname, partid).dict()
 
 
-def check_parts_definition_dataframe(df):
-    """
-    Takes the standard layout dataframe, check the field validity.
-    Works with dict or DataFrame
-    """
-    valid = True
-    for start, end, size in zip(df["RAMStart"], df["RAMEnd"], df["RAMSize"]):
-        if end - start + 1 != size:
-            valid = False
-    return valid
+def check_parts_definition(parts: List[LPCPart]) -> bool:
+    return all(p.RAMEnd - p.RAMStart + 1 == p.RAMSize for p in parts)
